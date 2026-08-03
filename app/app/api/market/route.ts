@@ -1,16 +1,28 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getBrlPerUsdc } from "@/lib/fx";
+import { computeResaleSplit } from "@/lib/split";
 
-export async function GET() {
+// LAYOUT_UPDATE.md §5 — duas abas: "tickets" (eventos futuros) e "collectibles"
+// (eventos já ocorridos). Corte é sempre por event.eventDate < now(), nunca por
+// EventStatus.ENDED (nada garante que esse status seja atualizado hoje — §5.1).
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const tab = searchParams.get("tab") === "collectibles" ? "collectibles" : "tickets";
+  const now = new Date();
+
   const listings = await prisma.listing.findMany({
     where: {
       status:           "ACTIVE",
       onchainListingId: { not: null },
+      ticket: {
+        event: tab === "collectibles" ? { eventDate: { lt: now } } : { eventDate: { gte: now } },
+      },
     },
     include: {
       ticket: {
         include: {
+          checkin: true,
           event: {
             select: {
               id:           true,
@@ -19,6 +31,10 @@ export async function GET() {
               city:         true,
               eventDate:    true,
               coverImageUrl: true,
+              maxResaleBps: true,
+              platformFeeBps: true,
+              royaltyBps: true,
+              royaltyOrgShareBps: true,
             },
           },
         },
@@ -29,24 +45,38 @@ export async function GET() {
 
   const fxRate = await getBrlPerUsdc();
 
-  const result = listings.map((l) => ({
-    id:              l.id,
-    onchainListingId: l.onchainListingId,
-    tokenId:         l.tokenId,
-    sellerAddress:   l.sellerAddress,
-    priceUsdc:       Number(l.price),
-    priceBrl:        Math.round(Number(l.price) * fxRate * 100) / 100,
-    paymentToken:    l.paymentToken,
-    expiresAt:       l.expiresAt,
-    createdAt:       l.createdAt,
-    ticket: {
-      tokenId:      l.ticket.tokenId,
-      ticketNumber: l.ticket.ticketNumber,
-      seat:         l.ticket.seat,
-      facePrice:    Number(l.ticket.facePrice),
-      event:        l.ticket.event,
-    },
-  }));
+  const result = listings.map((l) => {
+    const priceBrl = Math.round(Number(l.price) * fxRate * 100) / 100;
+    const { platformFeeBps, royaltyBps, royaltyOrgShareBps, ...event } = l.ticket.event;
+    // "Você recebe" — PLANO_EVOLUCAO_V2.md §3.8: o vendedor não fica com o
+    // preço cheio, e o split é calculado aqui (não no cliente) pra usar
+    // sempre a mesma fórmula que o contrato via computeResaleSplit.
+    const split = computeResaleSplit({ amount: priceBrl, platformFeeBps, royaltyBps, royaltyOrgShareBps });
+
+    return {
+      id:              l.id,
+      onchainListingId: l.onchainListingId,
+      tokenId:         l.tokenId,
+      sellerAddress:   l.sellerAddress,
+      priceUsdc:       Number(l.price),
+      priceBrl,
+      paymentToken:    l.paymentToken,
+      expiresAt:       l.expiresAt,
+      createdAt:       l.createdAt,
+      isCollectible:   tab === "collectibles",
+      attendedEvent:   l.ticket.checkin !== null, // "Você esteve lá" — §5.3
+      sellerReceivesBrl:   split.sellerShare,
+      organizerRoyaltyBrl: split.organizerRoyalty,
+      platformTotalBrl:    split.platformTotal, // taxa da plataforma + parte dela no royalty
+      ticket: {
+        tokenId:      l.ticket.tokenId,
+        ticketNumber: l.ticket.ticketNumber,
+        seat:         l.ticket.seat,
+        facePrice:    Number(l.ticket.facePrice),
+        event,
+      },
+    };
+  });
 
   return NextResponse.json(result);
 }

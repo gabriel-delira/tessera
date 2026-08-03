@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthUser, unauthorized, forbidden } from "@/lib/auth";
+import { geocodeAddress } from "@/lib/geocode";
 
 export async function PATCH(
   req: NextRequest,
@@ -24,7 +25,7 @@ export async function PATCH(
 
   const body = await req.json().catch(() => ({}));
   const allowed = [
-    "title","description","venue","city","coverImageUrl",
+    "title","description","venue","city","coverImageUrl","coverVideoUrl",
     "eventDate","ticketPriceUsdc","maxTickets",
   ];
   const data: Record<string, unknown> = {};
@@ -32,6 +33,12 @@ export async function PATCH(
     if (key in body) {
       data[key] = key === "eventDate" ? new Date(body[key]) : body[key];
     }
+  }
+
+  if ("venue" in data || "city" in data) {
+    const geo = await geocodeAddress((data.venue as string) ?? event.venue, (data.city as string) ?? event.city);
+    data.latitude = geo?.latitude ?? null;
+    data.longitude = geo?.longitude ?? null;
   }
 
   const updated = await prisma.event.update({ where: { id }, data });

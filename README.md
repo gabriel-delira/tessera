@@ -1,4 +1,4 @@
-# Shaar — Plataforma de Ingressos NFT
+# Tessera — Plataforma de Ingressos NFT
 
 Stack: Next.js 16 · Prisma · PostgreSQL · viem · Privy · Solidity/Foundry · Base (EVM L2)
 
@@ -7,7 +7,7 @@ Stack: Next.js 16 · Prisma · PostgreSQL · viem · Privy · Solidity/Foundry �
 ## Estrutura
 
 ```
-shaar/
+tessera/
   smart_contracts/   Contratos Solidity + scripts Foundry
   app/               Next.js (App Router) + Prisma + API routes
 ```

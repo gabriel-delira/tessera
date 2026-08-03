@@ -1,4 +1,4 @@
-# Stack & Infraestrutura — Shaar
+# Stack & Infraestrutura — Tessera
 
 ## Stack principal
 

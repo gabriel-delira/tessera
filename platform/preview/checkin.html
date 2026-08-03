@@ -3,38 +3,81 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Check-in — Shaar</title>
+<title>Tessera — Check-in</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="theme.js"></script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <g id="i-scanner" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 8V5.5A2.5 2.5 0 0 1 5.5 3H8M16 3h2.5A2.5 2.5 0 0 1 21 5.5V8M21 16v2.5a2.5 2.5 0 0 1-2.5 2.5H16M8 21H5.5A2.5 2.5 0 0 1 3 18.5V16"/>
+    <path d="M3 12h18"/>
+  </g>
+  <g id="i-check" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12.5 9.5 18 20 6.5"/>
+  </g>
+  <g id="i-x" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <path d="M6 6l12 12M18 6L6 18"/>
+  </g>
+  <g id="i-sol" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+    <circle cx="12" cy="12" r="4.2"/>
+    <path d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/>
+  </g>
+  <g id="i-lua" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+    <path d="M20 14.2A8.5 8.5 0 1 1 9.8 4a7 7 0 0 0 10.2 10.2Z"/>
+  </g>
+</defs></svg>
+
 <header class="topbar">
-  <a class="logo" href="index.html">◆ <span>Shaar</span></a>
+  <a class="logo" href="index.html">
+    <svg class="logo-mark" viewBox="0 0 32 40" width="26" height="32" aria-hidden="true" fill="none"
+         stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 37V16a12 12 0 0 1 24 0v21"/>
+      <rect x="10" y="15" width="12" height="19" rx="2"/>
+      <circle cx="16" cy="22.6" r="2.1"/><circle cx="16" cy="26.4" r="2.1"/>
+      <circle cx="14.1" cy="24.5" r="2.1"/><circle cx="17.9" cy="24.5" r="2.1"/>
+      <path d="M2 37h28"/>
+    </svg>
+    <span>TESSERA</span>
+  </a>
   <nav class="nav">
     <a href="index.html">Eventos</a>
     <a href="mercado.html">Mercado</a>
-    <a href="ingressos.html">Meus Ingressos</a>
+    <a href="ingressos.html">Minha Coleção</a>
     <a href="organizador.html">Organizador</a>
     <a href="admin.html">Admin</a>
     <a href="checkin.html" class="active">Check-in</a>
   </nav>
-  <span class="badge purple">STAFF · Portão A</span>
+  <button class="theme-toggle" onclick="toggleTheme()" aria-label="Alternar tema claro/escuro" type="button">
+    <svg class="ico theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sol"/></svg>
+    <svg class="ico theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-lua"/></svg>
+  </button>
+  <span class="badge purple">Staff · Portão A</span>
 </header>
 
 <main class="container">
   <div class="checkin-wrap">
     <h1 class="page-title">Show da Banda Aurora</h1>
-    <p class="page-sub">12/08/2026 · entradas <b style="color:var(--green);">96</b> de 142 vendidos</p>
+    <p class="page-sub" style="text-align:center;">
+      12/08/2026 · entradas <b style="color:var(--text-success);">96</b> de 142 vendidos
+    </p>
 
     <div class="scanner">
-      <div style="font-size:44px;">📷</div>
+      <svg class="scanner-symbol" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-scanner"/></svg>
       <div>Aponte a câmera pro QR do ingresso</div>
       <a class="btn sm secondary" href="#">digitar código manualmente</a>
     </div>
 
     <!-- Resultado: válido -->
     <div class="result ok">
-      <h3>✓ Entrada liberada</h3>
+      <h3>
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg>
+        Entrada liberada
+      </h3>
       <div class="meta" style="line-height:1.9;">
         <b style="color:var(--text)">Ingresso #143</b> · Pista<br>
         Check-in às 19:42 · Portão A
@@ -43,7 +86,10 @@
 
     <!-- Resultado: já usado -->
     <div class="result fail">
-      <h3>✗ Entrada negada — QR já utilizado</h3>
+      <h3>
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-x"/></svg>
+        Entrada negada — QR já utilizado
+      </h3>
       <div class="meta" style="line-height:1.9;">
         <b style="color:var(--text)">Ingresso #088</b> · check-in anterior às 19:15 (Portão B)<br>
         Possível tentativa de reuso de print. Encaminhar pra supervisão.

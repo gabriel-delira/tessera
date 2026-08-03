@@ -1,4 +1,4 @@
-# Shaar — Brainstorm & Descrição do Projeto
+# Tessera — Brainstorm & Descrição do Projeto
 
 > Documento vivo para alinhar visão, explorar ideias e registrar decisões de produto ainda em aberto.
 
@@ -7,7 +7,7 @@
 ## Descrição do projeto
 
 **O que é:**
-Shaar é uma plataforma de ingressos digitais para eventos ao vivo. Organizadores cadastram shows, festivais e peças; compradores pagam com PIX ou cartão como em qualquer outra plataforma — só que por baixo os ingressos existem on-chain, o que torna a revenda auditável, os royalties automáticos e o ingresso imune a fraude.
+Tessera é uma plataforma de ingressos digitais para eventos ao vivo. Organizadores cadastram shows, festivais e peças; compradores pagam com PIX ou cartão como em qualquer outra plataforma — só que por baixo os ingressos existem on-chain, o que torna a revenda auditável, os royalties automáticos e o ingresso imune a fraude.
 
 **O que diferencia:**
 - **Anti-cambismo com royalty automático:** toda revenda repassa uma % configurável ao organizador, sem que a plataforma precise policiar nada — o contrato garante.
@@ -67,13 +67,13 @@ Shaar é uma plataforma de ingressos digitais para eventos ao vivo. Organizadore
 ### Estrutura jurídica / fiscal
 - **CNAE principal:** 7490-1/04 — Atividades de intermediação e agenciamento de serviços e negócios em geral
 - **Regime tributário sugerido:** Simples Nacional (alíquota consolidada a partir de ~6% para serviços; simplifica ISS, PIS/COFINS, IRPJ, CSLL)
-- **Base de receita da Shaar:** somente a taxa de 8% (não o valor total do ingresso) — organizer é o vendedor, Shaar emite NF só da taxa de serviço
+- **Base de receita da Tessera:** somente a taxa de 8% (não o valor total do ingresso) — organizer é o vendedor, Tessera emite NF só da taxa de serviço
 - [ ] Confirmar com contador se intermediação de ingressos + infraestrutura blockchain se enquadra no Simples sem restrição
 
 ### Regulatório / Compliance
 - [ ] Enquadramento da recompra de USDC (off-ramp do vendedor) — obriga licença de câmbio?
-- [ ] Custódia de ativos digitais / VASP — **levar para o jurídico:** Lei 14.478/2022 pode exigir autorização do BACEN como VASP; argumento central: usuário compra *ingresso* e nunca interage com ativo digital — NFT é detalhe de implementação interno (blockchain invisível), portanto Shaar é plataforma de ingressos, não custodiante de criptoativos; usar Turnkey ou AWS KMS não transfere a custódia legal (KMS é sub-processador técnico, custódia regulatória continua com Shaar independente de onde as chaves ficam); o argumento jurídico é de modelo de negócio, não de arquitetura técnica
-- **Decisão:** organizador é o vendedor — emite NF de cada ingresso; Shaar emite NF apenas da taxa de 8% como intermediário; CNPJ ativo passa a ser requisito do KYC do organizador
+- [ ] Custódia de ativos digitais / VASP — **levar para o jurídico:** Lei 14.478/2022 pode exigir autorização do BACEN como VASP; argumento central: usuário compra *ingresso* e nunca interage com ativo digital — NFT é detalhe de implementação interno (blockchain invisível), portanto Tessera é plataforma de ingressos, não custodiante de criptoativos; usar Turnkey ou AWS KMS não transfere a custódia legal (KMS é sub-processador técnico, custódia regulatória continua com Tessera independente de onde as chaves ficam); o argumento jurídico é de modelo de negócio, não de arquitetura técnica
+- **Decisão:** organizador é o vendedor — emite NF de cada ingresso; Tessera emite NF apenas da taxa de 8% como intermediário; CNPJ ativo passa a ser requisito do KYC do organizador
 - **Decisão:** KYC do organizador é obrigatório antes de ativar repasse — nível mínimo a definir (CNPJ, dados bancários, documentação societária)
 - **Decisão:** LGPD — ToS + Política de Privacidade publicada antes do lançamento; coletar somente CPF, email e histórico de compra com finalidade explícita; DPO e auditoria formal podem aguardar escala
 - **Feature obrigatória (pré-lançamento):** solicitação de exclusão de dados — `DELETE /account` na API (anonimiza/deleta CPF, email, dados pessoais; mantém registros fiscais pelo prazo legal) + tela de "excluir minha conta" no front dentro das configurações do usuário
@@ -88,7 +88,7 @@ Shaar é uma plataforma de ingressos digitais para eventos ao vivo. Organizadore
 
 ## Diferenciadores vs. incumbentes
 
-| | Ingresso.com | Sympla | **Shaar** |
+| | Ingresso.com | Sympla | **Tessera** |
 |---|---|---|---|
 | Revenda oficial | Não | Não | Sim — com royalty automático |
 | Royalty para organizador na revenda | Não | Não | Sim — configurável |
@@ -153,7 +153,7 @@ Feature on/off por evento — ativa para alta demanda, desligada para eventos pe
 
 - **Identificação:** usuário precisa estar logado para entrar na fila — sem auth, sem posição garantida. Fluxo: se não autenticado ao tentar comprar ingresso de evento com fila ativa → redireciona para login → retorna para a fila após auth.
 - **Anti-replay (jumping the queue):** JWT de admissão com `valid_until` curto (15 min) + campo `jti` (UUID único por emissão) armazenado como `SET jti:<jti> 1 EX 900` no Redis. Checkout consome o `jti` na primeira validação bem-sucedida (`DEL`) — uso duplo é rejeitado.
-- **Alta disponibilidade:** serviço de fila deployado em infra completamente separada da origem — container e domínio próprios (ex: `queue.shaar.com.br`), Redis exclusivo, Cloudflare na frente para absorver o spike inicial. Se a origem cair durante um evento, o waiting room continua exibindo posições e admitindo usuários; eles só encontram erro ao tentar prosseguir para o checkout.
+- **Alta disponibilidade:** serviço de fila deployado em infra completamente separada da origem — container e domínio próprios (ex: `queue.tessera.com.br`), Redis exclusivo, Cloudflare na frente para absorver o spike inicial. Se a origem cair durante um evento, o waiting room continua exibindo posições e admitindo usuários; eles só encontram erro ao tentar prosseguir para o checkout.
 - **Fairness / aba fechada-reaberta:** ao reconectar, cliente reenvia `user_id` → backend executa `ZRANK queue:{event_id} <user_id>` — se já está na fila, retorna posição existente sem re-adicionar. Posição só é perdida se o usuário for admitido e o JWT expirar sem uso (aí volta ao final da fila).
 
 **Steps de implementação:**
@@ -231,12 +231,12 @@ Lock necessário para evitar race condition em compras simultâneas do mesmo CPF
 
 ## Nome (em definição)
 
-Nome de trabalho atual: **Shaar** (hebraico — "portão/entrada")
+Nome de trabalho atual: **Tessera** (hebraico — "portão/entrada")
 
 > Ver `nomes.md` para lista completa de candidatos.
 
 Próximos passos no naming:
-- [ ] Verificar disponibilidade de domínio (`shaar.com.br`, `shaar.io`)
+- [ ] Verificar disponibilidade de domínio (`tessera.com.br`, `tessera.io`)
 - [ ] Verificar registro no INPI
 - [ ] Testar pronunciabilidade com pessoas fora do projeto
 

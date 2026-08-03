@@ -1,4 +1,4 @@
-# Fluxos — Shaar
+# Fluxos — Tessera
 
 ## Smart contracts
 
@@ -109,7 +109,7 @@ Serviços usados: Prisma, onchain (read), FX
 ### Check-in por QR
 Entrada: `POST /api/checkin`
 Quem pode chamar: STAFF ou ADMIN
-Etapas: valida payload `shaar:v1:{tokenId}:{window}:{userId}:{sig}` (HMAC + janela 30s ±1) → confirma que o dono atual do ticket gerou o QR → valida status `VALID` → marca `CHECKED_IN` + cria `Checkin`.
+Etapas: valida payload `tessera:v1:{tokenId}:{window}:{userId}:{sig}` (HMAC + janela 30s ±1) → confirma que o dono atual do ticket gerou o QR → valida status `VALID` → marca `CHECKED_IN` + cria `Checkin`.
 Serviços usados: Prisma, HMAC (`QR_SECRET`)
 
 ### QR rotativo do ingresso

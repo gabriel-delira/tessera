@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { psp } from "@/lib/psp";
-import { buyTicketOnChain, settleListedTicketOnChain, unlockListingOnChain, getOnchainTicketNumber } from "@/lib/onchain";
+import { buyTicketOnChain, settleListedTicketOnChain, buyListedTicketForOnChain, unlockListingOnChain, getOnchainTicketNumber } from "@/lib/onchain";
+import { computeResaleSplit } from "@/lib/split";
 
 // Shared handler — receives a charge_id + status and drives the purchase state machine.
 export async function processPspPayment(chargeId: string): Promise<{ ok: boolean; message: string }> {
@@ -43,6 +44,7 @@ export async function processPspPayment(chargeId: string): Promise<{ ok: boolean
   // ── Resale flow ───────────────────────────────────────────────────────────────
   if (purchase.listingId && purchase.listing) {
     const listing = purchase.listing;
+    const event = purchase.event;
 
     if (listing.onchainListingId === null) {
       await triggerRefund(purchase.id, purchase.pspChargeId, Number(purchase.amountBrl), null);
@@ -51,11 +53,80 @@ export async function processPspPayment(chargeId: string): Promise<{ ok: boolean
 
     await prisma.purchase.update({ where: { id: purchase.id }, data: { status: "MINTING" } });
 
+    // LAYOUT_UPDATE.md §6.4 — se houver negociação aceita para este listing/comprador,
+    // o preço acordado prevalece sobre o preço do anúncio. Sem negociação, é o preço do
+    // anúncio mesmo (agreedPrice sempre existe, nunca é opcional).
+    const acceptedNegotiation = await prisma.negotiation.findFirst({
+      where: { listingId: listing.id, buyerUserId: purchase.userId, status: "ACCEPTED", agreedPrice: { not: null } },
+    });
+    const agreedPriceUsdc = acceptedNegotiation?.agreedPrice
+      ? Number(acceptedNegotiation.agreedPrice)
+      : Number(listing.price);
+
+    const sellerUser = await prisma.user.findFirst({ where: { walletAddress: listing.sellerAddress } });
+    const organizer  = await prisma.organizer.findUnique({ where: { id: event.organizerId } });
+
+    // Fluxo Cripto só é possível sem preço negociado — o contrato paga l.price,
+    // não tem como honrar um agreedPrice diferente (§6.4). Com negociação
+    // aceita, cai para o Fluxo Reais mesmo que a preferência seja CRYPTO.
+    const useCryptoFlow = sellerUser?.payoutMethod === "CRYPTO" && !acceptedNegotiation;
+
     try {
-      const txHash = await settleListedTicketOnChain(
-        listing.onchainListingId,
-        recipientWallet as `0x${string}`
-      );
+      let txHash: `0x${string}`;
+      const ledgerWrites = [];
+
+      if (useCryptoFlow) {
+        // Split acontece dentro do contrato — vendedor e RoyaltySplitter do
+        // evento recebem USDC diretamente. Nenhum crédito de ledger aqui: o
+        // dinheiro já chegou, não é "a receber".
+        txHash = await buyListedTicketForOnChain(listing.onchainListingId, recipientWallet as `0x${string}`);
+      } else {
+        txHash = await settleListedTicketOnChain(
+          listing.onchainListingId,
+          recipientWallet as `0x${string}`,
+          agreedPriceUsdc
+        );
+
+        // Split — LAYOUT_UPDATE.md §5.7: no Fluxo Reais o dinheiro não passa
+        // pelo contrato, então o repasse acontece aqui, refletido no ledger.
+        // O atestado on-chain gravado no evento TicketSettled é o que permite
+        // ao organizador conferir esses mesmos números depois (§5.7.2).
+        const split = computeResaleSplit({
+          amount:             Number(purchase.amountBrl),
+          platformFeeBps:     event.platformFeeBps,
+          royaltyBps:         event.royaltyBps,
+          royaltyOrgShareBps: event.royaltyOrgShareBps,
+        });
+
+        if (sellerUser) {
+          ledgerWrites.push(
+            prisma.ledgerEntry.create({
+              data: {
+                userId:      sellerUser.id,
+                type:        "RESALE_PAYOUT",
+                amountBrl:   split.sellerShare,
+                description: `Revenda — ${event.title} (ingresso #${listing.tokenId})`,
+                purchaseId:  purchase.id,
+                onchainTxHash: txHash,
+              },
+            })
+          );
+        }
+        if (organizer && split.organizerRoyalty > 0) {
+          ledgerWrites.push(
+            prisma.ledgerEntry.create({
+              data: {
+                userId:      organizer.userId,
+                type:        "ROYALTY_PAYOUT",
+                amountBrl:   split.organizerRoyalty,
+                description: `Royalty de revenda — ${event.title} (ingresso #${listing.tokenId})`,
+                purchaseId:  purchase.id,
+                onchainTxHash: txHash,
+              },
+            })
+          );
+        }
+      }
 
       await prisma.$transaction([
         prisma.listing.update({ where: { id: listing.id }, data: { status: "SOLD" } }),
@@ -67,6 +138,7 @@ export async function processPspPayment(chargeId: string): Promise<{ ok: boolean
           where: { id: purchase.id },
           data:  { status: "COMPLETED", tokenId: listing.tokenId, mintTxHash: txHash, completedAt: new Date() },
         }),
+        ...ledgerWrites,
       ]);
 
       return { ok: true, message: `Resale settled — ticket ${listing.tokenId} transferred to buyer` };

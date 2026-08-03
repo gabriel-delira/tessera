@@ -3,15 +3,15 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/db";
 import { getAuthUser, unauthorized } from "@/lib/auth";
 
-const QR_SECRET = process.env.QR_SECRET;
-if (!QR_SECRET) throw new Error("QR_SECRET env var not set — refusing to start");
+if (!process.env.QR_SECRET) throw new Error("QR_SECRET env var not set — refusing to start");
+const QR_SECRET: string = process.env.QR_SECRET;
 const WINDOW_SECS = 30;
 
 // Validates the rotating QR payload and returns tokenId + userId, or null if invalid.
-// Format: shaar:v1:{tokenId}:{window}:{userId}:{sig}
+// Format: tessera:v1:{tokenId}:{window}:{userId}:{sig}
 function validateQrPayload(payload: string): { tokenId: number; userId: string } | null {
   const parts = payload.split(":");
-  if (parts.length !== 6 || parts[0] !== "shaar" || parts[1] !== "v1") return null;
+  if (parts.length !== 6 || parts[0] !== "tessera" || parts[1] !== "v1") return null;
 
   const tokenId = parseInt(parts[2], 10);
   const window  = parseInt(parts[3], 10);

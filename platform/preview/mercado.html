@@ -3,22 +3,68 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mercado de Revenda — Shaar</title>
+<title>Tessera — Mercado de Revenda</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="theme.js"></script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <g id="i-portal" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 20v-8a7 7 0 0 1 14 0v8"/><path d="M3 20h18"/>
+  </g>
+  <g id="i-quadrifolio" fill="none" stroke="currentColor" stroke-width="1.6">
+    <circle cx="12" cy="9.8" r="3.2"/><circle cx="12" cy="14.2" r="3.2"/>
+    <circle cx="9.8" cy="12" r="3.2"/><circle cx="14.2" cy="12" r="3.2"/>
+  </g>
+  <g id="i-olho" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+    <path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.6"/>
+  </g>
+  <g id="i-carrinho" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.6L21 8H6"/>
+    <circle cx="9.5" cy="19.5" r="1.4"/><circle cx="17" cy="19.5" r="1.4"/>
+  </g>
+  <g id="i-saida" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 5v-.5A1.5 1.5 0 0 0 12.5 3h-6A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h6a1.5 1.5 0 0 0 1.5-1.5V19"/>
+    <path d="M10 12h11M17 8l4 4-4 4"/>
+  </g>
+  <g id="i-sol" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+    <circle cx="12" cy="12" r="4.2"/>
+    <path d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/>
+  </g>
+  <g id="i-lua" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+    <path d="M20 14.2A8.5 8.5 0 1 1 9.8 4a7 7 0 0 0 10.2 10.2Z"/>
+  </g>
+</defs></svg>
+
 <header class="topbar">
-  <a class="logo" href="index.html">◆ <span>Shaar</span></a>
+  <a class="logo" href="index.html">
+    <svg class="logo-mark" viewBox="0 0 32 40" width="26" height="32" aria-hidden="true" fill="none"
+         stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 37V16a12 12 0 0 1 24 0v21"/>
+      <rect x="10" y="15" width="12" height="19" rx="2"/>
+      <circle cx="16" cy="22.6" r="2.1"/><circle cx="16" cy="26.4" r="2.1"/>
+      <circle cx="14.1" cy="24.5" r="2.1"/><circle cx="17.9" cy="24.5" r="2.1"/>
+      <path d="M2 37h28"/>
+    </svg>
+    <span>TESSERA</span>
+  </a>
   <nav class="nav">
     <a href="index.html">Eventos</a>
     <a href="mercado.html" class="active">Mercado</a>
-    <a href="ingressos.html">Meus Ingressos</a>
+    <a href="ingressos.html">Minha Coleção</a>
     <a href="organizador.html">Organizador</a>
     <a href="admin.html">Admin</a>
     <a href="checkin.html">Check-in</a>
   </nav>
-  <a class="btn secondary" href="ingressos.html">+ Revender meu ingresso</a>
+  <button class="theme-toggle" onclick="toggleTheme()" aria-label="Alternar tema claro/escuro" type="button">
+    <svg class="ico theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sol"/></svg>
+    <svg class="ico theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-lua"/></svg>
+  </button>
+  <a class="btn secondary" href="ingressos.html">Revender meu ingresso</a>
 </header>
 
 <main class="container">
@@ -26,33 +72,37 @@
   <p class="page-sub">Compra segura entre pessoas — o pagamento é distribuído automaticamente entre vendedor, organizador e plataforma.</p>
 
   <div class="filters">
-    <input type="text" placeholder="Buscar evento...">
-    <select><option>Todos os eventos</option><option>Festival Maré Alta</option><option>Show da Banda Aurora</option><option>Conf. Web3 Brasil</option></select>
-    <select><option>Menor preço</option><option>Maior preço</option><option>Expira primeiro</option></select>
+    <input type="text" placeholder="Buscar evento..." aria-label="Buscar evento">
+    <select aria-label="Filtrar por evento"><option>Todos os eventos</option><option>Festival Maré Alta</option><option>Show da Banda Aurora</option><option>Conf. Web3 Brasil</option></select>
+    <select aria-label="Ordenar resultados"><option>Menor preço</option><option>Maior preço</option><option>Expira primeiro</option></select>
   </div>
 
   <div class="panel" style="margin-bottom:24px;">
-    <div class="panel-head">🎪 Festival Maré Alta — 20/09/2026 <span class="badge red" style="margin-left:8px;">PRIMÁRIA ESGOTADA</span></div>
+    <div class="panel-head">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color:var(--text-accent);"><use href="#i-quadrifolio"/></svg>
+      Festival Maré Alta — 20/09/2026
+      <span class="badge red" style="margin-left:8px;">Primária esgotada</span>
+    </div>
     <table>
-      <tr><th>Ingresso</th><th>Setor</th><th>Preço</th><th>Você recebe</th><th>Expira</th><th></th></tr>
+      <tr><th>Ingresso</th><th>Setor</th><th>Preço</th><th>Expira</th><th></th></tr>
       <tr>
         <td><b>#201</b></td><td>Pista</td>
         <td><b>R$ 528,00</b><br><span class="meta">preço original: R$ 480</span></td>
-        <td class="meta">R$ 448,80 (85%)</td>
         <td class="meta">3 dias</td>
         <td><a class="btn sm" href="#modal-buy">Comprar</a></td>
       </tr>
       <tr>
-        <td><b>#1.044</b></td><td>Pista</td>
+        <td><b>#1.044</b> <span class="badge purple">Seu ingresso</span></td><td>Pista</td>
         <td><b>R$ 605,00</b><br><span class="meta">preço original: R$ 480</span></td>
-        <td class="meta">R$ 514,25 (85%)</td>
         <td class="meta">12 horas</td>
-        <td><a class="btn sm" href="#modal-buy">Comprar</a></td>
+        <td style="display:flex; gap:8px;">
+          <a class="btn sm secondary" href="#modal-detalhes-1044">Detalhes</a>
+          <a class="btn sm danger" href="ingressos.html">Cancelar</a>
+        </td>
       </tr>
       <tr>
         <td><b>#312</b></td><td>VIP</td>
         <td><b>R$ 990,00</b><br><span class="meta">preço original: R$ 781</span></td>
-        <td class="meta">R$ 841,50 (85%)</td>
         <td class="meta">sem expiração</td>
         <td><a class="btn sm" href="#modal-buy">Comprar</a></td>
       </tr>
@@ -60,15 +110,20 @@
   </div>
 
   <div class="panel">
-    <div class="panel-head">💻 Conf. Web3 Brasil — 03/10/2026</div>
+    <div class="panel-head">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color:var(--text-accent);"><use href="#i-portal"/></svg>
+      Conf. Web3 Brasil — 03/10/2026
+    </div>
     <table>
-      <tr><th>Ingresso</th><th>Setor</th><th>Preço</th><th>Você recebe</th><th>Expira</th><th></th></tr>
+      <tr><th>Ingresso</th><th>Setor</th><th>Preço</th><th>Expira</th><th></th></tr>
       <tr>
-        <td><b>#27</b></td><td>Credencial</td>
+        <td><b>#27</b> <span class="badge purple">Seu ingresso</span></td><td>Credencial</td>
         <td><b>R$ 165,00</b><br><span class="meta">preço original: R$ 120</span></td>
-        <td class="meta"><span class="badge purple">SEU INGRESSO</span></td>
         <td class="meta">6 dias</td>
-        <td><a class="btn sm danger" href="ingressos.html">Cancelar</a></td>
+        <td style="display:flex; gap:8px;">
+          <a class="btn sm secondary" href="#modal-detalhes-27">Detalhes</a>
+          <a class="btn sm danger" href="ingressos.html">Cancelar</a>
+        </td>
       </tr>
     </table>
   </div>
@@ -103,8 +158,96 @@
       </label>
     </div>
     <div style="display:flex; gap:10px; margin-top:16px;">
-      <a class="btn green" style="flex:1; text-align:center;" href="ingressos.html">Pagar</a>
+      <a class="btn" style="flex:1;" href="ingressos.html">Pagar</a>
       <a class="btn ghost" href="#">Cancelar</a>
+    </div>
+  </div>
+</div>
+
+<!-- Modal detalhes — anúncio próprio (#1.044) -->
+<div class="modal" id="modal-detalhes-1044">
+  <div class="box">
+    <h3>Detalhes do anúncio</h3>
+    <div class="meta" style="line-height:2;">
+      Festival Maré Alta · 20/09/2026 · Pista · <b style="color:var(--text)">Ingresso #1.044</b>
+    </div>
+    <hr style="border:none; border-top:1px solid var(--border); margin:12px 0;">
+
+    <div class="split">
+      Preço de listagem <b style="color:var(--text)">R$ 605,00</b> · original R$ 480,00<br>
+      Você recebe se vender: <b style="color:var(--text-success)">R$ 514,25</b>
+    </div>
+
+    <div class="meta" style="margin:16px 0 8px;">Engajamento do anúncio</div>
+    <div class="mini-stats">
+      <div class="mini-stat">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-olho"/></svg>
+        <div class="n">428</div>
+        <div class="l">Visualizações</div>
+      </div>
+      <div class="mini-stat">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-carrinho"/></svg>
+        <div class="n">34</div>
+        <div class="l">Adicionaram ao carrinho</div>
+      </div>
+      <div class="mini-stat">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-saida"/></svg>
+        <div class="n">27</div>
+        <div class="l">Saíram sem comprar</div>
+      </div>
+    </div>
+
+    <div class="note" style="margin-top:16px; margin-bottom:0;">
+      O percentual de repasse (vendedor / organizador / plataforma) é visível apenas para <b>administradores da plataforma</b>.
+    </div>
+
+    <div style="display:flex; gap:10px; margin-top:16px;">
+      <a class="btn secondary" style="flex:1; text-align:center;" href="ingressos.html">Editar anúncio</a>
+      <a class="btn ghost" href="#">Fechar</a>
+    </div>
+  </div>
+</div>
+
+<!-- Modal detalhes — anúncio próprio (#27) -->
+<div class="modal" id="modal-detalhes-27">
+  <div class="box">
+    <h3>Detalhes do anúncio</h3>
+    <div class="meta" style="line-height:2;">
+      Conf. Web3 Brasil · 03/10/2026 · Credencial · <b style="color:var(--text)">Ingresso #27</b>
+    </div>
+    <hr style="border:none; border-top:1px solid var(--border); margin:12px 0;">
+
+    <div class="split">
+      Preço de listagem <b style="color:var(--text)">R$ 165,00</b> · original R$ 120,00<br>
+      Você recebe se vender: <b style="color:var(--text-success)">R$ 140,25</b>
+    </div>
+
+    <div class="meta" style="margin:16px 0 8px;">Engajamento do anúncio</div>
+    <div class="mini-stats">
+      <div class="mini-stat">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-olho"/></svg>
+        <div class="n">156</div>
+        <div class="l">Visualizações</div>
+      </div>
+      <div class="mini-stat">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-carrinho"/></svg>
+        <div class="n">9</div>
+        <div class="l">Adicionaram ao carrinho</div>
+      </div>
+      <div class="mini-stat">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-saida"/></svg>
+        <div class="n">9</div>
+        <div class="l">Saíram sem comprar</div>
+      </div>
+    </div>
+
+    <div class="note" style="margin-top:16px; margin-bottom:0;">
+      O percentual de repasse (vendedor / organizador / plataforma) é visível apenas para <b>administradores da plataforma</b>.
+    </div>
+
+    <div style="display:flex; gap:10px; margin-top:16px;">
+      <a class="btn secondary" style="flex:1; text-align:center;" href="ingressos.html">Editar anúncio</a>
+      <a class="btn ghost" href="#">Fechar</a>
     </div>
   </div>
 </div>

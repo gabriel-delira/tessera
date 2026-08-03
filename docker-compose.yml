@@ -1,0 +1,74 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: tessera
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:latest
+    entrypoint: ["anvil"]
+    command: ["--host", "0.0.0.0"]
+    ports:
+      - "8545:8545"
+    healthcheck:
+      test: ["CMD-SHELL", "cast block-number --rpc-url http://127.0.0.1:8545"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  contracts-deploy:
+    image: ghcr.io/foundry-rs/foundry:latest
+    working_dir: /workspace/smart_contracts
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        git config --global --add safe.directory /workspace
+        [ -d lib/forge-std ] || forge install foundry-rs/forge-std
+        [ -d lib/openzeppelin-contracts ] || forge install OpenZeppelin/openzeppelin-contracts
+        forge build
+        forge script script/Deploy.s.sol --rpc-url http://anvil:8545 --broadcast --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+    environment:
+      CHAIN_ENV: local
+    volumes:
+      - ./:/workspace
+    depends_on:
+      anvil:
+        condition: service_healthy
+
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./app:/app
+      - app_node_modules:/app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/tessera
+      RPC_URL: http://anvil:8545
+      CHAIN_ENV: local
+      NEXT_PUBLIC_PRIVY_APP_ID: ${NEXT_PUBLIC_PRIVY_APP_ID:-changeme}
+      PRIVY_APP_SECRET: ${PRIVY_APP_SECRET:-changeme}
+    depends_on:
+      db:
+        condition: service_healthy
+      contracts-deploy:
+        condition: service_completed_successfully
+
+volumes:
+  db_data:
+  app_node_modules:

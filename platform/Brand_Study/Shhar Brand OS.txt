@@ -1,0 +1,618 @@
+SHAAR — Brand System v1
+PARTE I — Estratégia da Marca
+01. Cover
+Capa
+Assinatura
+Big Idea
+02. The Big Idea
+
+Por que a Shaar existe.
+
+Technology disappears.
+Experiences remain.
+
+Manifesto resumido.
+
+03. Manifesto
+
+Nossa filosofia.
+
+Não vendemos ingressos.
+
+Abrimos portas para experiências.
+
+Versão completa do manifesto.
+
+04. Posicionamento
+
+Problema.
+
+Mercado.
+
+Mudança cultural.
+
+Nova categoria.
+
+"Access Platform"
+
+05. Propósito
+
+Missão
+
+Visão
+
+Valores
+
+North Star
+
+06. Personalidade
+
+Arquétipos
+
+Tom emocional
+
+Características
+
+O que somos
+
+O que não somos
+
+07. Território Emocional
+
+Mapa emocional
+
+Sensações
+
+Experiência do usuário
+
+Jornada emocional
+
+08. Brand Narrative
+
+Como contamos histórias.
+
+Antes
+
+Durante
+
+Depois do evento
+
+09. Brand Pillars
+
+Acesso
+
+Confiança
+
+Pertencimento
+
+Memória
+
+Fluidez
+
+10. Visual Philosophy
+
+Por que usamos portais.
+
+Por que usamos luz.
+
+Por que usamos arquitetura.
+
+Por que usamos pessoas.
+
+PARTE II — Creative Direction
+11. Moodboard
+
+Arquitetura
+
+Pessoas
+
+Eventos
+
+Produto
+
+Natureza
+
+Materiais
+
+12. Photography Direction
+
+Regras.
+
+35% pessoas
+
+35% arquitetura
+
+30% produto
+
+Luz
+
+Enquadramento
+
+Temperatura
+
+Movimento
+
+13. Color Story
+
+O significado emocional das cores.
+
+Por que Azul.
+
+Por que Laranja.
+
+Por que Roxo.
+
+Por que Off White.
+
+Por que Midnight.
+
+14. Materials
+
+Madeira
+
+Pedra
+
+Vidro
+
+Linho
+
+Bronze
+
+Aço
+
+Papel
+
+15. Shapes
+
+Arcos
+
+Círculos
+
+Ondas
+
+Linhas
+
+Espaço negativo
+
+16. Motion Principles
+
+Como a marca se move.
+
+Abrir
+
+Fluir
+
+Revelar
+
+Respirar
+
+Nunca "explodir".
+
+PARTE III — Logo System
+17. Logo Philosophy
+
+Por que esse símbolo.
+
+O que representa.
+
+18. Logo Construction
+
+Grid
+
+Golden Ratio
+
+Espessuras
+
+Proporções
+
+19. Safe Area
+
+Área de proteção.
+
+20. Minimum Size
+
+Reduções.
+
+21. Variations
+
+Vertical
+
+Horizontal
+
+Ícone
+
+Solid
+
+Outline
+
+Monocromático
+
+22. Incorrect Usage
+
+Tudo que nunca fazer.
+
+PARTE IV — Identity System
+23. Color Palette
+
+Primary
+
+Shaar Blue
+
+Festival Orange
+
+Creative Purple
+
+Midnight
+
+Ivory
+
+24. Secondary Palette
+
+Neutros
+
+Suporte
+
+Estados
+
+Gradientes
+
+25. Color Usage
+
+CTA
+
+Background
+
+Cards
+
+Hover
+
+Feedback
+
+Dark Mode
+
+26. Typography
+
+Sora
+
+DM Serif
+
+Hierarquia
+
+27. Type Scale
+
+Display
+
+Heading
+
+Title
+
+Body
+
+Caption
+
+Button
+
+Label
+
+28. Iconography
+
+Stroke
+
+Corner Radius
+
+Grid
+
+Peso
+
+29. Illustration Style
+
+Estilo
+
+Linhas
+
+Sombras
+
+Volumes
+
+30. Graphic Elements
+
+Padrões
+
+Texturas
+
+Linhas
+
+Arcos
+
+PARTE V — Digital Design System
+31. Grid System
+
+Desktop
+
+Tablet
+
+Mobile
+
+32. Spacing
+
+4pt Grid
+
+Escalas
+
+33. Radius
+
+Pequeno
+
+Médio
+
+Grande
+
+Pill
+
+34. Shadows
+
+Níveis
+
+35. Motion
+
+Timing
+
+Curvas
+
+Duração
+
+Microinterações
+
+36. Buttons
+
+Primary
+
+Secondary
+
+Ghost
+
+Danger
+
+Loading
+
+Disabled
+
+37. Inputs
+
+Campos
+
+Search
+
+OTP
+
+CPF
+
+PIX
+
+Wallet
+
+38. Selection Controls
+
+Checkbox
+
+Radio
+
+Switch
+
+Dropdown
+
+Select
+
+39. Navigation
+
+Navbar
+
+Sidebar
+
+Bottom Navigation
+
+Tabs
+
+Breadcrumb
+
+40. Feedback
+
+Toast
+
+Modal
+
+Dialog
+
+Alert
+
+Empty States
+
+41. Cards
+
+Evento
+
+Ingresso
+
+Marketplace
+
+Perfil
+
+NFT
+
+PARTE VI — Product Language
+42. Ticket System
+
+NFT Ticket
+
+PDF
+
+Apple Wallet
+
+Google Wallet
+
+Pulseira
+
+43. QR Experience
+
+Check-in
+
+QR Dinâmico
+
+Estados
+
+Segurança
+
+44. Marketplace
+
+Compra
+
+Venda
+
+Royalties
+
+Histórico
+
+45. Event Experience
+
+Página do evento
+
+Mapa
+
+Lineup
+
+Ingresso
+
+46. Dashboard
+
+Organizadores
+
+Usuários
+
+Admin
+
+47. Notifications
+
+Push
+
+Email
+
+SMS
+
+Wallet
+
+PARTE VII — Applications
+48. Brand Applications
+
+Outdoor
+
+Totem
+
+Festival
+
+Banner
+
+49. Digital Applications
+
+Landing Page
+
+App
+
+Dashboard
+
+Website
+
+50. Physical Applications
+
+Cartões
+
+Papelaria
+
+Embalagens
+
+Camisetas
+
+Credenciais
+
+Pulseiras
+
+51. Environmental Design
+
+Sinalização
+
+Palcos
+
+Entrada
+
+Wayfinding
+
+PARTE VIII — Future
+52. Accessibility
+
+Contraste
+
+Tipografia
+
+WCAG
+
+Motion
+
+53. Brand Evolution
+
+Como a marca pode evoluir.
+
+54. Vision
+
+O futuro da Shaar.
+
+Apêndice
+Design Tokens
+
+Cores
+
+Espaçamentos
+
+Radius
+
+Motion
+
+Typography
+
+Ícones
+
+Component Library
+
+Figma
+
+React
+
+Flutter
+
+Tailwind
+
+Assets
+
+SVG
+
+PNG
+
+PDF
+
+EPS
+
+AI
+
+Minha única mudança em relação ao que escrevi antes
+
+Enquanto organizava tudo, percebi que a Shaar não precisa de um "Brand Book". Ela precisa de um Brand OS (Operating System).
+
+O objetivo não é apenas documentar uma identidade visual, mas criar um sistema completo que conecta:
+
+estratégia de marca;
+identidade visual;
+linguagem de comunicação;
+fotografia;
+design de produto;
+interface;
+componentes;
+motion;
+implementação técnica.

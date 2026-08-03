@@ -1,9 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { usePrivy } from "@privy-io/react-auth";
+import { useParams } from "next/navigation";
+import { useAuth } from "@/app/components/AuthProvider";
 import Link from "next/link";
+import { Panel } from "../../components/ui/Panel";
+import { Button } from "../../components/ui/Button";
+import { Badge } from "../../components/ui/Badge";
+import { Icon } from "../../components/ui/Icon";
+import { IdentityModal } from "../../components/IdentityModal";
 
 interface EventDetail {
   id: string;
@@ -33,13 +38,14 @@ interface CheckoutState {
 
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { ready, authenticated, login, getAccessToken } = usePrivy();
+  const { ready, authenticated, login, getAccessToken } = useAuth();
   const [event, setEvent]           = useState<EventDetail | null>(null);
   const [loading, setLoading]       = useState(true);
   const [checkout, setCheckout]     = useState<CheckoutState | null>(null);
   const [purchaseStatus, setPurchaseStatus] = useState<string | null>(null);
   const [buying, setBuying]         = useState(false);
   const [error, setError]           = useState<string | null>(null);
+  const [needsIdentity, setNeedsIdentity] = useState(false);
 
   useEffect(() => {
     fetch(`/api/events/${id}`)
@@ -74,7 +80,10 @@ export default function EventDetailPage() {
         body: JSON.stringify({ method: "PIX" }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error ?? "Erro ao criar cobrança");
+      if (!r.ok) {
+        if (d.code === "IDENTIFICATION_REQUIRED") { setNeedsIdentity(true); return; }
+        throw new Error(d.error ?? "Erro ao criar cobrança");
+      }
       setCheckout(d);
       setPurchaseStatus("PENDING");
     } catch (err: unknown) {
@@ -84,114 +93,143 @@ export default function EventDetailPage() {
     }
   };
 
-  if (loading) return <div className="p-10 text-zinc-400">Carregando…</div>;
-  if (!event)  return <div className="p-10 text-red-500">Evento não encontrado.</div>;
+  if (loading) return <div className="p-10 text-text-muted">Carregando…</div>;
+  if (!event)  return <div className="p-10 text-erro-on-dark">Evento não encontrado.</div>;
 
   const soldOut = event.available !== null && event.available <= 0;
   const feePercent = (event.platformFeeBps / 100).toFixed(0);
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-10">
-      <Link href="/" className="text-sm text-zinc-400 hover:text-black mb-4 inline-block">← Voltar</Link>
+    <div className="mx-auto max-w-4xl px-6 py-10">
+      <Link href="/" className="mb-4 inline-block text-sm text-text-muted hover:text-text">← Voltar</Link>
 
-      {event.coverImageUrl && (
-        <img src={event.coverImageUrl} alt={event.title}
-          className="w-full h-64 object-cover rounded-xl mb-6" />
-      )}
-
-      <div className="flex flex-col md:flex-row gap-8">
-        {/* Info */}
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold mb-1">{event.title}</h1>
-          <p className="text-sm text-zinc-500 mb-1">
+      <div
+        className="relative mb-6 flex h-64 items-center overflow-hidden rounded-xl"
+        style={{
+          background: event.coverImageUrl ? undefined : "var(--grad-energia)",
+          backgroundImage: event.coverImageUrl ? `url(${event.coverImageUrl})` : undefined,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      >
+        {!event.coverImageUrl && (
+          <Icon name="portal" className="absolute right-6 h-32 w-32 text-ouro-300 opacity-25" />
+        )}
+        <span
+          aria-hidden
+          className="absolute inset-0"
+          style={{ background: "linear-gradient(to top, rgba(12,19,36,.9), transparent 60%)" }}
+        />
+        <div className="relative z-10 px-8">
+          <h1 className="font-display text-3xl text-text">{event.title}</h1>
+          <p className="mt-2 flex items-center gap-1.5 text-sm text-text-muted">
+            <Icon name="calendario" />
             {new Date(event.eventDate).toLocaleString("pt-BR")} · {event.venue}, {event.city}
           </p>
-          <p className="text-xs text-zinc-400 mb-4">Organizado por {event.organizer}</p>
-          {event.description && <p className="text-sm text-zinc-600 leading-relaxed">{event.description}</p>}
-          {event.maxTickets && (
-            <p className="mt-4 text-sm text-zinc-500">
-              Disponíveis: {event.available ?? "?"}/{event.maxTickets}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-6 md:flex-row">
+        {/* Info */}
+        <div className="flex flex-1 flex-col gap-4">
+          <Panel title="Sobre o evento">
+            <p className="mb-3 flex items-center gap-1.5 text-sm text-text-muted">
+              <Icon name="escudo" />
+              Organizado por {event.organizer}
             </p>
-          )}
+            {event.description && (
+              <p className="text-sm leading-relaxed text-text">{event.description}</p>
+            )}
+            {event.maxTickets && (
+              <p className="mt-4 flex items-center gap-1.5 text-sm text-text-muted">
+                <Icon name="ticket" />
+                Disponíveis: {event.available ?? "?"}/{event.maxTickets}
+              </p>
+            )}
+          </Panel>
         </div>
 
         {/* Purchase box */}
-        <div className="w-full md:w-72 shrink-0">
-          {!checkout ? (
-            <div className="border rounded-xl p-5 flex flex-col gap-3">
-              <div>
-                <p className="text-xl font-bold">
-                  R$ {event.ticketPriceBrl.toFixed(2).replace(".", ",")}
-                </p>
-                <p className="text-xs text-zinc-400">≈ {event.ticketPriceUsdc} USDC</p>
+        <div className="w-full shrink-0 md:w-72">
+          <Panel title="Comprar ingresso">
+            {!checkout ? (
+              <div className="flex flex-col gap-3">
+                <div>
+                  <p className="text-2xl font-bold tabular-nums text-text">
+                    R$ {event.ticketPriceBrl.toFixed(2).replace(".", ",")}
+                  </p>
+                  <p className="text-xs text-text-muted">≈ {event.ticketPriceUsdc} USDC</p>
+                </div>
+                <p className="text-xs text-text-muted">Taxa de serviço {feePercent}% inclusa</p>
+                {soldOut ? (
+                  <Badge variant="error">Esgotado</Badge>
+                ) : (
+                  <Button onClick={handleBuy} disabled={buying || !ready} className="w-full">
+                    {buying ? "Aguarde…" : authenticated ? "Comprar ingresso" : "Entrar e comprar"}
+                  </Button>
+                )}
+                {error && <p className="text-xs text-erro-on-dark">{error}</p>}
               </div>
-              <p className="text-xs text-zinc-400">Taxa de serviço {feePercent}% inclusa</p>
-              {soldOut ? (
-                <p className="text-center text-red-500 font-medium text-sm">Esgotado</p>
-              ) : (
-                <button
-                  onClick={handleBuy}
-                  disabled={buying || !ready}
-                  className="w-full rounded-lg bg-black py-2.5 text-sm font-medium text-white
-                    hover:bg-zinc-800 disabled:opacity-50 transition-colors"
-                >
-                  {buying ? "Aguarde…" : authenticated ? "Comprar ingresso" : "Entrar e comprar"}
-                </button>
-              )}
-              {error && <p className="text-xs text-red-500">{error}</p>}
-            </div>
-          ) : (
-            <div className="border rounded-xl p-5 flex flex-col gap-3">
-              {purchaseStatus === "COMPLETED" ? (
-                <div className="text-center">
-                  <p className="text-2xl">🎉</p>
-                  <p className="font-semibold mt-1">Ingresso é seu!</p>
-                  <p className="text-xs text-zinc-500 mt-1">NFT mintado com sucesso.</p>
-                </div>
-              ) : purchaseStatus === "REFUNDED" ? (
-                <div className="text-center">
-                  <p className="font-semibold text-red-500">Pagamento estornado</p>
-                  <p className="text-xs text-zinc-500 mt-1">Erro ao processar. Tente novamente.</p>
-                </div>
-              ) : (
-                <>
-                  <p className="font-semibold text-sm">Pague via PIX</p>
-                  <p className="text-xs text-zinc-500">
-                    R$ {checkout.amountBrl.toFixed(2).replace(".", ",")} · expira às{" "}
-                    {new Date(checkout.expiresAt).toLocaleTimeString("pt-BR")}
-                  </p>
-                  {checkout.qrCodeUrl && (
-                    <img src={checkout.qrCodeUrl} alt="QR PIX" className="w-40 mx-auto rounded" />
-                  )}
-                  <button
-                    onClick={() => navigator.clipboard.writeText(checkout.pixCode)}
-                    className="text-xs underline text-zinc-500"
-                  >
-                    Copiar código PIX
-                  </button>
-                  <p className="text-xs text-zinc-400 text-center">
-                    Status: <span className="font-medium">{purchaseStatus}</span>
-                  </p>
-                  {process.env.NODE_ENV !== "production" && (
+            ) : (
+              <div className="flex flex-col gap-3">
+                {purchaseStatus === "COMPLETED" ? (
+                  <div className="text-center">
+                    <Icon name="check" className="mx-auto h-8 w-8 text-sucesso-on-dark" />
+                    <p className="mt-1 font-semibold text-text">Ingresso é seu!</p>
+                    <p className="mt-1 text-xs text-text-muted">NFT mintado com sucesso.</p>
+                  </div>
+                ) : purchaseStatus === "REFUNDED" ? (
+                  <div className="text-center">
+                    <p className="font-semibold text-erro-on-dark">Pagamento estornado</p>
+                    <p className="mt-1 text-xs text-text-muted">Erro ao processar. Tente novamente.</p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold text-text">Pague via PIX</p>
+                    <p className="text-xs text-text-muted">
+                      R$ {checkout.amountBrl.toFixed(2).replace(".", ",")} · expira às{" "}
+                      {new Date(checkout.expiresAt).toLocaleTimeString("pt-BR")}
+                    </p>
+                    {checkout.qrCodeUrl && (
+                      <img src={checkout.qrCodeUrl} alt="QR PIX" className="mx-auto w-40 rounded" />
+                    )}
                     <button
-                      onClick={async () => {
-                        const token = await getAccessToken();
-                        await fetch(`/api/dev/simulate-payment/${checkout.purchaseId}`, {
-                          method: "POST",
-                          headers: { Authorization: `Bearer ${token}` },
-                        });
-                      }}
-                      className="text-xs text-blue-500 underline"
+                      onClick={() => navigator.clipboard.writeText(checkout.pixCode)}
+                      className="text-xs text-text-muted underline"
                     >
-                      [DEV] Simular pagamento
+                      Copiar código PIX
                     </button>
-                  )}
-                </>
-              )}
-            </div>
-          )}
+                    <p className="text-center text-xs text-text-muted">
+                      Status: <span className="font-medium text-text">{purchaseStatus}</span>
+                    </p>
+                    {process.env.NODE_ENV !== "production" && (
+                      <button
+                        onClick={async () => {
+                          const token = await getAccessToken();
+                          await fetch(`/api/dev/simulate-payment/${checkout.purchaseId}`, {
+                            method: "POST",
+                            headers: { Authorization: `Bearer ${token}` },
+                          });
+                        }}
+                        className="text-xs text-violeta-300 underline"
+                      >
+                        [DEV] Simular pagamento
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </Panel>
         </div>
       </div>
+
+      <IdentityModal
+        open={needsIdentity}
+        mode="identify"
+        onClose={() => setNeedsIdentity(false)}
+        onDone={() => { setNeedsIdentity(false); handleBuy(); }}
+      />
     </div>
   );
 }

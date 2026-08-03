@@ -70,7 +70,7 @@ Documento completo cobrindo:
 
 # FIXES
 
-# Revisão — Shaar (contratos + serviços)
+# Revisão — Tessera (contratos + serviços)
 
 Escopo: `smart_contracts/src/*.sol` + `app/lib/*` + `app/app/api/**` + `worker/indexer.ts`. As descobertas de contrato eu analisei diretamente; as de backend foram levantadas por um agente e confirmei as críticas no código.
 
@@ -88,7 +88,7 @@ O `POST` aceita qualquer JSON `{ charge_id, status: "paid" }` e dispara `process
 
 ### 2. `freeze()` num ingresso em escrow congela a metadata enquanto a listagem ainda esta ativa
 
-[TicketNFT.sol:101-122](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/shaar/smart_contracts/src/TicketNFT.sol#L101-L122) × [TicketResale.sol:107](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/shaar/smart_contracts/src/TicketResale.sol#L107)
+[TicketNFT.sol:101-122](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/tessera/smart_contracts/src/TicketNFT.sol#L101-L122) × [TicketResale.sol:107](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/tessera/smart_contracts/src/TicketResale.sol#L107)
 
 `freeze()` apenas pina a URI — o token **permanece transferível** via contratos da plataforma. Portanto `cancelListing`/`buyListedTicket`/`settleListedTicket` continuam funcionando normalmente mesmo após o freeze. O único efeito colateral é cosmético: o comprador de uma revenda pós-freeze adquire um token com metadata já congelada (CID IPFS definitivo) em vez do metadata dinâmico pré-evento.
 
@@ -108,7 +108,7 @@ Só checa `role === ORGANIZER|ADMIN`. Cria um `Withdrawal` de **`amountUsdc` arb
 
 ### 4. Settler compromisso = dreno de todas as listagens em escrow
 
-[TicketResale.sol:169-180](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/shaar/smart_contracts/src/TicketResale.sol#L169-L180)
+[TicketResale.sol:169-180](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/tessera/smart_contracts/src/TicketResale.sol#L169-L180)
 
 `settleListedTicket` transfere o NFT escrowed para um `recipient` arbitrário **sem qualquer pagamento on-chain** (confia que o PSP liquidou off-chain). Se a chave do `settler` (a tesouraria) vazar, o atacante chama `settleListedTicket(listingId, suaConta)` para cada listagem ativa e drena todos os ingressos em escrow sem pagar nada. É uma decisão de design (settler confiável), mas concentra risco numa hot key.
 
@@ -144,7 +144,7 @@ Dois mints concorrentes (webhook + indexer safety-net) calculam o mesmo count. S
 
 ### 8. Lock de listagem não é respeitado na compra cripto
 
-[TicketResale.sol:182-185](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/shaar/smart_contracts/src/TicketResale.sol#L182-L185)
+[TicketResale.sol:182-185](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/tessera/smart_contracts/src/TicketResale.sol#L182-L185)
 
 `lockListing` impede o vendedor de cancelar durante o checkout PSP, mas `_buyListed` (fluxo cripto) só checa `l.active`, **não `!l.locked`**. Um comprador cripto "snipa" a listagem travada; o settle do PSP depois reverte (`active=false`) e o comprador fiat é reembolsado. Sem perda de NFT (o flag `active` protege), mas o lock não cumpre o propósito.
 
@@ -160,7 +160,7 @@ Dois mints concorrentes (webhook + indexer safety-net) calculam o mesmo count. S
 
 ### 10. Pagamentos por `.call` a organizer/recipient podem travar swap/venda/royalty (griefing DoS)
 
-[TicketSwap.sol:166-168](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/shaar/smart_contracts/src/TicketSwap.sol#L166-L168) · [TicketSale.sol:195](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/shaar/smart_contracts/src/TicketSale.sol#L195) · [RoyaltySplitter.sol:32-45](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/shaar/smart_contracts/src/RoyaltySplitter.sol#L32-L45)
+[TicketSwap.sol:166-168](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/tessera/smart_contracts/src/TicketSwap.sol#L166-L168) · [TicketSale.sol:195](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/tessera/smart_contracts/src/TicketSale.sol#L195) · [RoyaltySplitter.sol:32-45](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/tessera/smart_contracts/src/RoyaltySplitter.sol#L32-L45)
 
 Se um organizer for um contrato que reverte ao receber ETH, `_payETH`/`_splitETH` reverte e derruba a transação inteira (aceitar swap, comprar ingresso, receber royalty). Organizer é semi-confiável, mas é um vetor de griefing.
 
@@ -183,8 +183,8 @@ Assina só `tokenId:window` com janela ±1 (~90s) e não vincula a evento/portad
 ## 🟢 BAIXO / INFO
 
 - **`dev/simulate-payment`** ([route.ts:13-15](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/app/app/api/dev/simulate-payment/%5BpurchaseId%5D/route.ts#L13-L15)): guardado só por `NODE_ENV === "production"`; em `staging`/unset vira segunda via de mint grátis. Use flag fail-closed (`ENABLE_DEV_ROUTES !== "true"` → 404).
-- **`TicketSwap` não é deployado** no [Deploy.s.sol](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/shaar/smart_contracts/script/Deploy.s.sol) — só USDC/NFT/Sale/Resale. Swap está inutilizável no estado atual; confirmar se é intencional.
-- **Chave privada hardcoded** no deploy [Deploy.s.sol:67-68](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/shaar/smart_contracts/script/Deploy.s.sol#L67-L68) — é a chave conhecida do Anvil (dev), mas garanta que nunca rode contra mainnet.
+- **`TicketSwap` não é deployado** no [Deploy.s.sol](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/tessera/smart_contracts/script/Deploy.s.sol) — só USDC/NFT/Sale/Resale. Swap está inutilizável no estado atual; confirmar se é intencional.
+- **Chave privada hardcoded** no deploy [Deploy.s.sol:67-68](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/tessera/smart_contracts/script/Deploy.s.sol#L67-L68) — é a chave conhecida do Anvil (dev), mas garanta que nunca rode contra mainnet.
 - **`_distributeFee` para `address(0)`**: ingresso sem `organizer` faz `_payETH(address(0), share)` — `.call` retorna `true` e a fatia é **queimada**. Validar organizer != 0.
 - **`!event.onchainEventId`** em [admin/.../pause/route.ts:18](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/app/app/api/admin/events/%5Bid%5D/pause/route.ts#L18) trata `eventId === 0` (válido) como "não on-chain". Usar `=== null` (checkout e webhook já usam).
 - **Indexer**: `getLastBlock` começa em `head-1` sem deploy block ([indexer.ts:12-17](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/app/worker/indexer.ts#L12-L17)) → perde eventos históricos; e o handler de `Transfer` grava o contrato de escrow como `ownerAddress` durante a listagem ([indexer.ts:90-98](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/app/worker/indexer.ts#L90-L98)).
@@ -198,7 +198,7 @@ Assina só `tokenId:window` com janela ±1 (~90s) e não vincula a evento/portad
 3. **#3 withdrawals sem saldo** + **#5 fees pelo organizer** + **#4 settler hot key** — núcleo de integridade financeira.
 4. **#6/#7** corridas de checkout e numeração de ingresso.
 
-O lado positivo: o uso de OpenZeppelin está correto (ReentrancyGuard + checks-effects-interactions nos contratos de pagamento, ERC-2981 com royalty imutável anti-manipulação em [TicketResale.sol:190](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/shaar/smart_contracts/src/TicketResale.sol#L190), SafeERC20). Os problemas são de **interação entre contratos** (freeze×escrow), **confiança off-chain** (settler/webhook) e **autorização/validação no backend** — não de matemática de tokens.
+O lado positivo: o uso de OpenZeppelin está correto (ReentrancyGuard + checks-effects-interactions nos contratos de pagamento, ERC-2981 com royalty imutável anti-manipulação em [TicketResale.sol:190](vscode-webview://0pq9c75jlufe4hmtsljtsf0f98iivk4qlnubsuggusnobqlpnch2/tessera/smart_contracts/src/TicketResale.sol#L190), SafeERC20). Os problemas são de **interação entre contratos** (freeze×escrow), **confiança off-chain** (settler/webhook) e **autorização/validação no backend** — não de matemática de tokens.
 
 Quer que eu **aplique as correções** de algum desses (sugiro começar por #1, #2 e #3), ou prefere que eu detalhe o patch de algum item específico antes?
 

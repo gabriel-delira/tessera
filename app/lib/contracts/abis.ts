@@ -209,11 +209,26 @@ export const TICKET_RESALE_ABI = [
     stateMutability: "nonpayable",
   },
   {
+    // Fluxo Cripto (LAYOUT_UPDATE.md §5.7) — tesouraria paga em USDC pelo
+    // listingId.price e o próprio contrato faz o split atômico. Requer
+    // aprovação prévia da tesouraria para o contrato de resale gastar USDC
+    // (setup operacional, fora do código do app).
     type: "function",
-    name: "settleListedTicket",
+    name: "buyListedTicketFor",
     inputs: [
       { name: "listingId", type: "uint256" },
       { name: "recipient", type: "address" },
+    ],
+    outputs: [],
+    stateMutability: "payable",
+  },
+  {
+    type: "function",
+    name: "settleListedTicket",
+    inputs: [
+      { name: "listingId",   type: "uint256" },
+      { name: "recipient",   type: "address" },
+      { name: "agreedPrice", type: "uint256" },
     ],
     outputs: [],
     stateMutability: "nonpayable",
@@ -267,12 +282,19 @@ export const TICKET_RESALE_ABI = [
     ],
   },
   {
+    // LAYOUT_UPDATE.md §5.7.2 — atestado on-chain do split, gravado na mesma
+    // transação que já transferia o NFT no fluxo de pagamento off-chain.
     type: "event",
     name: "TicketSettled",
     inputs: [
-      { name: "listingId", type: "uint256", indexed: true },
-      { name: "recipient", type: "address", indexed: true },
-      { name: "tokenId",   type: "uint256", indexed: true },
+      { name: "listingId",       type: "uint256", indexed: true },
+      { name: "recipient",       type: "address", indexed: true },
+      { name: "tokenId",         type: "uint256", indexed: true },
+      { name: "agreedPrice",     type: "uint256" },
+      { name: "sellerAmount",    type: "uint256" },
+      { name: "royaltyAmount",   type: "uint256" },
+      { name: "royaltyReceiver", type: "address" },
+      { name: "platformAmount",  type: "uint256" },
     ],
   },
 ] as const;

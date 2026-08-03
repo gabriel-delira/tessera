@@ -5,7 +5,7 @@ import type { NextRequest } from "next/server";
 /**
  * E2E (infra mockada) da rota POST /api/checkin — exercita o handler real do
  * Next, incluindo a validação do QR rotativo (CONTEXT.md):
- *   payload = shaar:v1:{tokenId}:{window}:{userId}:{sig}
+ *   payload = tessera:v1:{tokenId}:{window}:{userId}:{sig}
  *   - HMAC-SHA256 keyed por QR_SECRET, comparado em tempo constante;
  *   - janela de 30s com tolerância ±1 (30s de clock skew);
  *   - o QR é vinculado ao DONO ATUAL do ticket;
@@ -39,7 +39,7 @@ const OWNER_WALLET = "0xabc0000000000000000000000000000000000001";
 function makePayload(tokenId: number, userId: string, windowOffset = 0): string {
   const window = Math.floor(Date.now() / (WINDOW_SECS * 1000)) + windowOffset;
   const sig = createHmac("sha256", QR_SECRET).update(`${tokenId}:${window}:${userId}`).digest("hex");
-  return `shaar:v1:${tokenId}:${window}:${userId}:${sig}`;
+  return `tessera:v1:${tokenId}:${window}:${userId}:${sig}`;
 }
 
 function postReq(body: unknown): NextRequest {
@@ -79,7 +79,7 @@ describe("POST /api/checkin — auth & role gate", () => {
 
 describe("POST /api/checkin — validação do QR", () => {
   it("422 para assinatura inválida", async () => {
-    const res = await POST(postReq({ qrPayload: "shaar:v1:1:1:user:deadbeef" }));
+    const res = await POST(postReq({ qrPayload: "tessera:v1:1:1:user:deadbeef" }));
     expect(res.status).toBe(422);
   });
 

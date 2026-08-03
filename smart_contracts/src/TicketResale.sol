@@ -47,8 +47,22 @@ contract TicketResale is Ownable, ReentrancyGuard {
     event ListingCancelled(uint256 indexed listingId);
     event ListingLocked(uint256 indexed listingId, address indexed buyer);
     event ListingUnlocked(uint256 indexed listingId);
-    // Emitted by the off-chain-payment flow: payment settled via PSP, only NFT transferred on-chain.
-    event TicketSettled(uint256 indexed listingId, address indexed recipient, uint256 indexed tokenId);
+    // Emitted by the off-chain-payment flow (Fluxo Reais e Fluxo Cripto, LAYOUT_UPDATE.md
+    // §5.7): payment settled off-chain (PIX) or delivered via buyListedTicketFor, only the
+    // NFT moves here — mas o split fica gravado nesta mesma transação como atestado
+    // (§5.7.2): sellerAmount/royaltyAmount/platformAmount somam agreedPrice, e o royalty
+    // vem de royaltyInfo(), não de um valor informado pelo caller. Isso é o que permite ao
+    // organizador conferir o repasse sem depender de nenhum dado fornecido pela plataforma.
+    event TicketSettled(
+        uint256 indexed listingId,
+        address indexed recipient,
+        uint256 indexed tokenId,
+        uint256 agreedPrice,
+        uint256 sellerAmount,
+        uint256 royaltyAmount,
+        address royaltyReceiver,
+        uint256 platformAmount
+    );
     event PlatformFeeUpdated(uint256 newFeeBps);
     event PlatformWalletUpdated(address newWallet);
     event SettlerUpdated(address newSettler);
@@ -171,12 +185,20 @@ contract TicketResale is Ownable, ReentrancyGuard {
         _buyListed(listingId, recipient);
     }
 
-    /// Fiat resale flow: PSP split already settled payment off-chain (seller/organizer/platform
-    /// each received their BRL share directly). This function only transfers the escrowed NFT.
+    /// Off-chain-payment resale flow (LAYOUT_UPDATE.md §5.7): payment was settled off-chain
+    /// (PIX, no fluxo Reais) — this function transfers the escrowed NFT and, no mesmo passo,
+    /// grava o split de `agreedPrice` como atestado on-chain (§5.7.2). `agreedPrice` é o
+    /// preço do anúncio quando não há negociação, ou o valor acordado quando há (§6.4) —
+    /// quem decide isso é o backend, o contrato só registra o que recebe.
     /// `recipient` must match the buyer recorded at lockListing — this prevents a compromised
     /// settler key from redirecting NFTs to an arbitrary address.
-    function settleListedTicket(uint256 listingId, address recipient) external nonReentrant onlySettler {
+    function settleListedTicket(
+        uint256 listingId,
+        address recipient,
+        uint256 agreedPrice
+    ) external nonReentrant onlySettler {
         require(recipient != address(0), "Invalid recipient");
+        require(agreedPrice > 0, "agreedPrice must be > 0");
         Listing storage l = listings[listingId];
         require(l.active, "Not active");
         require(l.locked, "Not locked");
@@ -185,9 +207,17 @@ contract TicketResale is Ownable, ReentrancyGuard {
 
         l.active = false;
         l.locked = false;
+
+        // Royalty calculado pelo contrato via ERC-2981 — nunca informado pelo caller.
+        // É o que torna o atestado à prova de mentira sobre a fatia do organizador.
+        (address royaltyReceiver, uint256 royaltyAmount) = nft.royaltyInfo(l.tokenId, agreedPrice);
+        uint256 platformShare = (agreedPrice * platformFeeBps) / BPS;
+        require(platformShare + royaltyAmount <= agreedPrice, "Fees exceed price");
+        uint256 sellerShare = agreedPrice - platformShare - royaltyAmount;
+
         nft.transferFrom(address(this), recipient, l.tokenId);
 
-        emit TicketSettled(listingId, recipient, l.tokenId);
+        emit TicketSettled(listingId, recipient, l.tokenId, agreedPrice, sellerShare, royaltyAmount, royaltyReceiver, platformShare);
     }
 
     function _buyListed(uint256 listingId, address recipient) internal {

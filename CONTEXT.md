@@ -1,4 +1,4 @@
-# Context: Shaar
+# Context: Tessera
 
 ## Domain Vocabulary
 | Term | Definition |

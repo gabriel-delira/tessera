@@ -203,7 +203,17 @@ export async function unlockListingOnChain(onchainListingId: number): Promise<vo
   await publicClient.waitForTransactionReceipt({ hash: txHash });
 }
 
-export async function settleListedTicketOnChain(
+// Fluxo Cripto (LAYOUT_UPDATE.md §5.7) — a tesouraria paga em USDC o preço do
+// anúncio (l.price on-chain; o contrato não aceita agreedPrice aqui) e o
+// contrato faz o split atomicamente: vendedor recebe na própria carteira
+// (a mesma que anunciou — §5.7.3, sem payoutWallet configurável), o
+// RoyaltySplitter do evento recebe e divide entre organizador/plataforma.
+// ⚠️ Requer setup operacional fora deste código: a tesouraria precisa manter
+// saldo em USDC e ter aprovado o contrato de resale a gastar esse saldo
+// (approve prévio). Sem isso, esta chamada reverte por saldo/allowance
+// insuficiente — não é um bug de código, é infraestrutura de tesouraria que
+// precisa existir antes deste caminho rodar em produção.
+export async function buyListedTicketForOnChain(
   onchainListingId: number,
   recipientWallet: `0x${string}`
 ): Promise<`0x${string}`> {
@@ -212,11 +222,66 @@ export async function settleListedTicketOnChain(
   const txHash = await client.writeContract({
     address: resale,
     abi: TICKET_RESALE_ABI,
-    functionName: "settleListedTicket",
+    functionName: "buyListedTicketFor",
     args: [BigInt(onchainListingId), recipientWallet],
   });
   await publicClient.waitForTransactionReceipt({ hash: txHash });
   return txHash;
+}
+
+// agreedPriceUsdc — LAYOUT_UPDATE.md §5.7.2/§6.4: preço do anúncio quando não
+// há negociação, ou o valor acordado quando há. É o que o contrato usa para
+// calcular e gravar o split como atestado on-chain — nunca um valor pronto.
+export async function settleListedTicketOnChain(
+  onchainListingId: number,
+  recipientWallet: `0x${string}`,
+  agreedPriceUsdc: number
+): Promise<`0x${string}`> {
+  const { resale } = getAddresses();
+  const client = await getTreasuryClient();
+  const txHash = await client.writeContract({
+    address: resale,
+    abi: TICKET_RESALE_ABI,
+    functionName: "settleListedTicket",
+    args: [BigInt(onchainListingId), recipientWallet, BigInt(Math.round(agreedPriceUsdc * 1_000_000))],
+  });
+  await publicClient.waitForTransactionReceipt({ hash: txHash });
+  return txHash;
+}
+
+// LAYOUT_UPDATE.md §5.7.2/§7 — lê o atestado on-chain gravado no evento
+// TicketSettled de uma transação já minerada, para o extrato do organizador
+// comparar contra o que o backend registrou no ledger ("conferido on-chain ✓").
+export interface SettledSplit {
+  agreedPrice: number;
+  sellerAmount: number;
+  royaltyAmount: number;
+  royaltyReceiver: string;
+  platformAmount: number;
+}
+
+export async function getSettledSplitFromTx(txHash: `0x${string}`): Promise<SettledSplit | null> {
+  const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+  const logs = parseEventLogs({
+    abi: TICKET_RESALE_ABI,
+    logs: receipt.logs,
+    eventName: "TicketSettled",
+  });
+  if (logs.length === 0) return null;
+  const args = logs[0].args as {
+    agreedPrice: bigint;
+    sellerAmount: bigint;
+    royaltyAmount: bigint;
+    royaltyReceiver: string;
+    platformAmount: bigint;
+  };
+  return {
+    agreedPrice:     Number(args.agreedPrice) / 1_000_000,
+    sellerAmount:    Number(args.sellerAmount) / 1_000_000,
+    royaltyAmount:   Number(args.royaltyAmount) / 1_000_000,
+    royaltyReceiver: args.royaltyReceiver,
+    platformAmount:  Number(args.platformAmount) / 1_000_000,
+  };
 }
 
 // ── Freeze — operator (owner or treasury) ────────────────────────────────────

@@ -25,7 +25,7 @@ class MockPsp implements PspProvider {
   async createPixCharge(amountBrl: number, externalRef: string): Promise<PixCharge> {
     const chargeId = `mock_${externalRef}_${Date.now()}`;
     const pixCode  = `00020126580014BR.GOV.BCB.PIX0136${chargeId}5204000053039865406${amountBrl.toFixed(2).replace(".","")
-      }5802BR5909Shaar Dev6009SAO PAULO62070503***63040000`;
+      }5802BR5909Tessera Dev6009SAO PAULO62070503***63040000`;
     return {
       chargeId,
       pixCode,

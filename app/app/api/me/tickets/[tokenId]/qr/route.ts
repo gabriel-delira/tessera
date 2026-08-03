@@ -4,8 +4,8 @@ import QRCode from "qrcode";
 import { prisma } from "@/lib/db";
 import { getAuthUser, unauthorized } from "@/lib/auth";
 
-const QR_SECRET = process.env.QR_SECRET;
-if (!QR_SECRET) throw new Error("QR_SECRET env var not set — refusing to start");
+if (!process.env.QR_SECRET) throw new Error("QR_SECRET env var not set — refusing to start");
+const QR_SECRET: string = process.env.QR_SECRET;
 const WINDOW_SECS = 30;
 
 function makeQrPayload(tokenId: number, userId: string): string {
@@ -13,7 +13,7 @@ function makeQrPayload(tokenId: number, userId: string): string {
   const sig = createHmac("sha256", QR_SECRET)
     .update(`${tokenId}:${window}:${userId}`)
     .digest("hex");
-  return `shaar:v1:${tokenId}:${window}:${userId}:${sig}`;
+  return `tessera:v1:${tokenId}:${window}:${userId}:${sig}`;
 }
 
 export async function GET(
@@ -41,7 +41,7 @@ export async function GET(
   const secsIntoWindow = Math.floor(Date.now() / 1000) % WINDOW_SECS;
   const ttl = Math.max(WINDOW_SECS - secsIntoWindow - 2, 1);
 
-  return new NextResponse(png, {
+  return new NextResponse(new Uint8Array(png), {
     headers: {
       "Content-Type": "image/png",
       "Cache-Control": `private, max-age=${ttl}`,

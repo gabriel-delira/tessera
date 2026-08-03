@@ -8,5 +8,6 @@ optimizer_runs = 200
 remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
 ]
+fs_permissions = [{ access = "read-write", path = "../app/lib/contracts" }]
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

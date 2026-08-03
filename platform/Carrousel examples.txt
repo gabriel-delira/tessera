@@ -1,0 +1,8 @@
+cara olhando o shaar/platform/preview me parece q o site n traz a vibe de uma plataforma de eventos. Se puder, dá uma olhada nos layouts das plataformas como:
+- https://www.sympla.com.br/
+- https://www.ticketmaster.com.br/
+- https://www.ingresso.com/
+- https://www.lollapaloozaar.com/
+- https://www.tomorrowland.com/
+
+e ai usa eles para alterar o layout da nossa plataforma pra ficar mais nessa vibe de eventos

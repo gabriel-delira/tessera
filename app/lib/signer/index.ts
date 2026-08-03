@@ -18,7 +18,11 @@ async function loadPrivyAccount(walletIdVar: string, addressVar: string): Promis
   const walletId = process.env[walletIdVar];
   const address  = process.env[addressVar];
   if (!walletId || !address) throw new Error(`Missing env var: ${walletIdVar} or ${addressVar}`);
-  return createViemAccount({ walletId, address: address as `0x${string}`, privy });
+  // @privy-io/server-auth/viem declara seu próprio tipo PrivyClient (bug de
+  // empacotamento da dependência) — estruturalmente idêntico ao de
+  // @privy-io/server-auth, mas TS os trata como nominalmente distintos por
+  // causa de campos privados. Cast local, sem mudança de comportamento.
+  return createViemAccount({ walletId, address: address as `0x${string}`, privy: privy as never });
 }
 
 let _signerPromise: Promise<Signer> | null = null;

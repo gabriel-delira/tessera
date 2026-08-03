@@ -15,8 +15,10 @@ export async function POST(
   const organizer = await prisma.organizer.findUnique({ where: { id } });
   if (!organizer) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  // Aprovar organizador é o momento em que o admin já checou CNPJ/contrato
+  // social — é o KYB do LAYOUT_UPDATE.md §5.6.1, exigido antes do 1o evento.
   await prisma.$transaction([
-    prisma.organizer.update({ where: { id }, data: { status: "APPROVED" } }),
+    prisma.organizer.update({ where: { id }, data: { status: "APPROVED", kybVerifiedAt: new Date() } }),
     prisma.user.update({ where: { id: organizer.userId }, data: { role: "ORGANIZER" } }),
   ]);
 

@@ -3,28 +3,65 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dashboard do Organizador — Shaar</title>
+<title>Tessera — Dashboard do Organizador</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="theme.js"></script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <g id="i-check" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12.5 9.5 18 20 6.5"/>
+  </g>
+  <g id="i-cadeado" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+    <rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>
+  </g>
+  <g id="i-sol" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+    <circle cx="12" cy="12" r="4.2"/>
+    <path d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/>
+  </g>
+  <g id="i-lua" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+    <path d="M20 14.2A8.5 8.5 0 1 1 9.8 4a7 7 0 0 0 10.2 10.2Z"/>
+  </g>
+</defs></svg>
+
 <header class="topbar">
-  <a class="logo" href="index.html">◆ <span>Shaar</span></a>
+  <a class="logo" href="index.html">
+    <svg class="logo-mark" viewBox="0 0 32 40" width="26" height="32" aria-hidden="true" fill="none"
+         stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 37V16a12 12 0 0 1 24 0v21"/>
+      <rect x="10" y="15" width="12" height="19" rx="2"/>
+      <circle cx="16" cy="22.6" r="2.1"/><circle cx="16" cy="26.4" r="2.1"/>
+      <circle cx="14.1" cy="24.5" r="2.1"/><circle cx="17.9" cy="24.5" r="2.1"/>
+      <path d="M2 37h28"/>
+    </svg>
+    <span>TESSERA</span>
+  </a>
   <nav class="nav">
     <a href="index.html">Eventos</a>
     <a href="mercado.html">Mercado</a>
-    <a href="ingressos.html">Meus Ingressos</a>
+    <a href="ingressos.html">Minha Coleção</a>
     <a href="organizador.html" class="active">Organizador</a>
     <a href="admin.html">Admin</a>
     <a href="checkin.html">Check-in</a>
   </nav>
-  <span class="badge purple">Produtora ABC ✓</span>
+  <button class="theme-toggle" onclick="toggleTheme()" aria-label="Alternar tema claro/escuro" type="button">
+    <svg class="ico theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sol"/></svg>
+    <svg class="ico theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-lua"/></svg>
+  </button>
+  <span class="badge purple">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:12px;height:12px;"><use href="#i-check"/></svg>
+    Produtora ABC
+  </span>
 </header>
 
 <main class="container">
-  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
-    <h1 class="page-title">Dashboard do Organizador</h1>
-    <a class="btn" href="#modal-novo">+ Novo evento</a>
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:4px;">
+    <h1 class="page-title" style="margin-bottom:0;">Dashboard do Organizador</h1>
+    <a class="btn" href="#modal-novo">Novo evento</a>
   </div>
   <p class="page-sub">Repasses a cada venda — sem D+30, sem intermediário.</p>
 
@@ -46,8 +83,8 @@
     </div>
     <div class="stat">
       <div class="label">Próximo repasse</div>
-      <div class="value" style="font-size:15px;">R$ 35.458</div>
-      <div class="delta" style="color:var(--muted);">Show da Banda Aurora</div>
+      <div class="value" style="font-size:20px;">R$ 35.458</div>
+      <div class="delta" style="color:var(--text-muted);">Show da Banda Aurora</div>
     </div>
   </div>
 
@@ -57,25 +94,30 @@
       <tr><th>Evento</th><th>Data</th><th>Status</th><th>Vendidos</th><th>Receita</th><th>Royalties</th><th></th></tr>
       <tr>
         <td><b>Show da Banda Aurora</b></td><td>12/08/2026</td>
-        <td><span class="badge green">EM VENDA</span></td>
+        <td><span class="badge green">Em venda</span></td>
         <td>142 / 500</td><td>R$ 35.458</td><td>—</td>
         <td><a class="btn sm ghost" href="#">detalhes</a></td>
       </tr>
       <tr>
         <td><b>Festival Maré Alta</b></td><td>20/09/2026</td>
-        <td><span class="badge red">ESGOTADO</span></td>
+        <td><span class="badge red">Esgotado</span></td>
         <td>2.000 / 2.000</td><td>R$ 139.661</td><td>R$ 6.677</td>
         <td><a class="btn sm ghost" href="#">detalhes</a></td>
       </tr>
       <tr>
         <td><b>Aurora — Tour 2027</b></td><td>14/03/2027</td>
-        <td><span class="badge yellow">AGUARDANDO APROVAÇÃO</span></td>
+        <td><span class="badge yellow">Aguardando aprovação</span></td>
         <td>—</td><td>—</td><td>—</td>
         <td><a class="btn sm ghost" href="#">editar</a></td>
       </tr>
       <tr>
         <td><b>Festival Maré Alta 2025</b></td><td>21/09/2025</td>
-        <td><span class="badge gray">🔒 ENCERRADO</span></td>
+        <td>
+          <span class="badge gray">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:12px;height:12px;"><use href="#i-cadeado"/></svg>
+            Encerrado
+          </span>
+        </td>
         <td>2.000 / 2.000</td><td>R$ 127.050</td><td>R$ 15.790</td>
         <td><a class="btn sm ghost" href="#">relatório</a></td>
       </tr>
@@ -88,35 +130,35 @@
   <div class="box" style="width:480px;">
     <h3>Novo evento</h3>
     <div class="meta" style="margin-bottom:14px;">Após enviar, o evento vai pra fila de aprovação da plataforma. A aprovação publica o evento e abre as vendas.</div>
-    <label class="meta">Nome do evento</label>
-    <input class="field" style="width:100%; margin:6px 0 10px;" placeholder="Ex.: Aurora — Tour 2027">
+    <label class="meta" for="ev-nome">Nome do evento</label>
+    <input class="field" id="ev-nome" style="width:100%; margin:6px 0 10px;" placeholder="Ex.: Aurora — Tour 2027">
     <div style="display:flex; gap:10px;">
       <div style="flex:1;">
-        <label class="meta">Data e hora</label>
-        <input class="field" style="width:100%; margin:6px 0 10px;" value="14/03/2027 21:00">
+        <label class="meta" for="ev-data">Data e hora</label>
+        <input class="field" id="ev-data" style="width:100%; margin:6px 0 10px;" value="14/03/2027 21:00">
       </div>
       <div style="flex:1;">
-        <label class="meta">Capacidade (máx. ingressos)</label>
-        <input class="field" style="width:100%; margin:6px 0 10px;" value="500">
+        <label class="meta" for="ev-cap">Capacidade (máx. ingressos)</label>
+        <input class="field" id="ev-cap" style="width:100%; margin:6px 0 10px;" value="500">
       </div>
     </div>
     <div style="display:flex; gap:10px;">
       <div style="flex:1;">
-        <label class="meta">Preço (R$)</label>
-        <input class="field" style="width:100%; margin:6px 0 10px;" value="250,00">
+        <label class="meta" for="ev-preco">Preço (R$)</label>
+        <input class="field" id="ev-preco" style="width:100%; margin:6px 0 10px;" value="250,00">
       </div>
       <div style="flex:1;">
-        <label class="meta">Royalty de revenda</label>
-        <select class="field" style="width:100%; margin:6px 0 10px;">
+        <label class="meta" for="ev-royalty">Royalty de revenda</label>
+        <select class="field" id="ev-royalty" style="width:100%; margin:6px 0 10px;">
           <option>10%</option><option>5%</option><option>0%</option>
         </select>
       </div>
     </div>
-    <label class="meta">Local</label>
-    <input class="field" style="width:100%; margin:6px 0 14px;" placeholder="Casa de show, endereço, cidade">
+    <label class="meta" for="ev-local">Local</label>
+    <input class="field" id="ev-local" style="width:100%; margin:6px 0 14px;" placeholder="Casa de show, endereço, cidade">
     <div class="split">Taxa da plataforma na venda primária: <b>8%</b> (definida no seu contrato comercial)</div>
     <div style="display:flex; gap:10px; margin-top:16px;">
-      <a class="btn" style="flex:1; text-align:center;" href="admin.html">Enviar pra aprovação</a>
+      <a class="btn" style="flex:1;" href="admin.html">Enviar pra aprovação</a>
       <a class="btn ghost" href="#">Cancelar</a>
     </div>
   </div>

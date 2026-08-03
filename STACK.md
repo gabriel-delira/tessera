@@ -1,4 +1,4 @@
-# Shaar — Stack & Infraestrutura
+# Tessera — Stack & Infraestrutura
 
 > Estado atual: contratos completos + testados, preview navegável, planejamento detalhado.
 > Backend/frontend ainda não iniciado.

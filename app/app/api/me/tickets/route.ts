@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
   const tickets = await prisma.ticket.findMany({
     where: { ownerAddress: user.walletAddress },
     include: {
+      checkin: { select: { id: true } }, // presença — "Você esteve lá" (§5.3/§8)
       event: {
         select: {
           id: true,
@@ -25,5 +26,7 @@ export async function GET(req: NextRequest) {
     orderBy: { mintedAt: "desc" },
   });
 
-  return NextResponse.json(tickets);
+  return NextResponse.json(
+    tickets.map((t) => ({ ...t, attended: t.checkin !== null }))
+  );
 }

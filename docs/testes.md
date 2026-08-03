@@ -1,6 +1,6 @@
-# Testes — Shaar
+# Testes — Tessera
 
-Cobre as duas camadas testáveis do Shaar: os **smart contracts** (Foundry) e o
+Cobre as duas camadas testáveis do Tessera: os **smart contracts** (Foundry) e o
 **app** Next.js/Prisma (Vitest, infra mockada). O diretório `platform/` é só
 mockup HTML estático — sem testes.
 
@@ -31,7 +31,7 @@ mockados — **nada conecta em banco, chain ou Privy**.
 |---|---|
 | `tests/unit/fx.test.ts` | **Câmbio BRL/USDC travado no checkout.** Usuário paga em BRL, on-chain é USDC; `getBrlPerUsdc` aplica spread sobre o mid; `usdcToBrl` arredonda a 2 casas, `brlToUsdc` a 6; `lockRate` devolve a taxa ask; round-trip dentro da tolerância. |
 | `tests/unit/psp.test.ts` | **Webhook do PSP é o motor do state machine + verificação fail-closed.** `verifyWebhook` valida HMAC-SHA256 sobre o **rawBody** contra `x-psp-signature` em tempo constante; rejeita header ausente, assinatura errada, corpo adulterado e **segredo não configurado** (fail-closed). Também: `createPixCharge` gera cobrança com expiração futura. |
-| `tests/e2e/checkin.e2e.test.ts` | **Fluxo de check-in com QR rotativo** (handler real `POST /api/checkin`). QR `shaar:v1:{tokenId}:{window}:{userId}:{sig}` validado por HMAC + janela de 30s com **tolerância ±1**; **vínculo ao dono atual** do ticket (QR de dono anterior é rejeitado); só **STAFF/ADMIN** fazem check-in; máquina de estados `VALID → CHECKED_IN` (409 se já checkado / não-VALID, 404 sem ticket, 422 QR inválido/expirado). |
+| `tests/e2e/checkin.e2e.test.ts` | **Fluxo de check-in com QR rotativo** (handler real `POST /api/checkin`). QR `tessera:v1:{tokenId}:{window}:{userId}:{sig}` validado por HMAC + janela de 30s com **tolerância ±1**; **vínculo ao dono atual** do ticket (QR de dono anterior é rejeitado); só **STAFF/ADMIN** fazem check-in; máquina de estados `VALID → CHECKED_IN` (409 se já checkado / não-VALID, 404 sem ticket, 422 QR inválido/expirado). |
 
 ### Lacunas conhecidas (app)
 - Webhook `POST /api/webhooks/psp`: idempotência (`processPspPayment` só processa `PENDING`) — alvo natural seguindo o padrão do `checkin.e2e`.

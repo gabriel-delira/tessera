@@ -1,4 +1,4 @@
-# Tech Debt — shaar
+# Tech Debt — tessera
 
 > Auditoria automatizada (BUG/FLOW/DOC + GAP cross-tier) — 2026-06-21.
 > Formato: `[TIPO] caminho:linha — descrição — SEVERIDADE`. Ordenado por severidade.

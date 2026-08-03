@@ -13,6 +13,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No wallet linked to account" }, { status: 409 });
   }
 
+  // LAYOUT_UPDATE.md §5.6.1 — KYC completo exigido no 1o anúncio de revenda,
+  // nunca antes (comprar e vender ingresso são livres até este ponto).
+  if (user.kycLevel !== "VERIFIED") {
+    return NextResponse.json({ error: "Full verification required to sell", code: "KYC_REQUIRED" }, { status: 403 });
+  }
+
   const body = await req.json().catch(() => ({}));
   const { tokenId, priceUsdc, expiresAt } = body as {
     tokenId:   number;
@@ -25,7 +31,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Verify ownership in DB
-  const ticket = await prisma.ticket.findUnique({ where: { tokenId } });
+  const ticket = await prisma.ticket.findUnique({ where: { tokenId }, include: { event: true } });
   if (!ticket) return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
   if (ticket.ownerAddress.toLowerCase() !== user.walletAddress.toLowerCase()) {
     return NextResponse.json({ error: "You do not own this ticket" }, { status: 403 });
@@ -33,8 +39,28 @@ export async function POST(req: NextRequest) {
   if (ticket.status === "LISTED") {
     return NextResponse.json({ error: "Ticket is already listed" }, { status: 409 });
   }
-  if (ticket.status !== "VALID") {
+
+  // LAYOUT_UPDATE.md §5.2 — regra bifurcada por evento futuro/passado. A ordem
+  // importa: checar isCollectible primeiro não deve abrir brecha para vender
+  // uma entrada que não entra mais (ingresso CHECKED_IN de evento futuro).
+  const isCollectible = ticket.event.eventDate.getTime() < Date.now();
+  if (!isCollectible && ticket.status !== "VALID") {
     return NextResponse.json({ error: "Ticket cannot be listed in its current status" }, { status: 409 });
+  }
+  if (isCollectible && !["VALID", "CHECKED_IN"].includes(ticket.status)) {
+    return NextResponse.json({ error: "Ticket cannot be listed in its current status" }, { status: 409 });
+  }
+
+  // LAYOUT_UPDATE.md §5.5 — teto de revenda. Só para evento futuro; colecionável
+  // nunca tem teto. Base é Ticket.facePrice, nunca o preço atual do evento.
+  if (!isCollectible && ticket.event.maxResaleBps) {
+    const cap = (Number(ticket.facePrice) * ticket.event.maxResaleBps) / 10000;
+    if (priceUsdc > cap + 1e-9) {
+      return NextResponse.json(
+        { error: `Price exceeds the resale cap of ${cap.toFixed(2)} USDC (${ticket.event.maxResaleBps / 100}% of face price)` },
+        { status: 409 }
+      );
+    }
   }
 
   const { nft, resale, usdc } = getAddresses();
@@ -65,6 +91,7 @@ export async function POST(req: NextRequest) {
     listingId:        listing.id,
     priceUsdc,
     priceBrl:         amountBrl,
+    isCollectible,
     nftAddress:       nft,
     resaleAddress:    resale,
     approveCalldata,

@@ -1,4 +1,4 @@
-# Descrição dos Contratos — Shaar
+# Descrição dos Contratos — Tessera
 
 > Referência de funções, quem pode chamar cada uma, e o que acontece on-chain.
 > Stack: Solidity ^0.8.20 · OpenZeppelin · Foundry · Base (EVM L2)

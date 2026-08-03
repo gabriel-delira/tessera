@@ -3,30 +3,77 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Meus Ingressos — Shaar</title>
+<title>Tessera — Minha Coleção</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="theme.js"></script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <g id="i-portal" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 20v-8a7 7 0 0 1 14 0v8"/><path d="M3 20h18"/>
+  </g>
+  <g id="i-quadrifolio" fill="none" stroke="currentColor" stroke-width="1.6">
+    <circle cx="12" cy="9.8" r="3.2"/><circle cx="12" cy="14.2" r="3.2"/>
+    <circle cx="9.8" cy="12" r="3.2"/><circle cx="14.2" cy="12" r="3.2"/>
+  </g>
+  <g id="i-ticket" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+    <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h15A1.5 1.5 0 0 1 21 8.5V10a2 2 0 0 0 0 4v1.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 15.5V14a2 2 0 0 0 0-4V8.5Z"/>
+  </g>
+  <g id="i-cadeado" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+    <rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>
+  </g>
+  <g id="i-moeda" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+    <circle cx="12" cy="12" r="8"/><path d="M12 6.5v11M9.5 9.5h4a1.8 1.8 0 0 1 0 3.6h-3a1.8 1.8 0 0 0 0 3.6h4"/>
+  </g>
+  <g id="i-sol" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+    <circle cx="12" cy="12" r="4.2"/>
+    <path d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/>
+  </g>
+  <g id="i-lua" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+    <path d="M20 14.2A8.5 8.5 0 1 1 9.8 4a7 7 0 0 0 10.2 10.2Z"/>
+  </g>
+</defs></svg>
+
 <header class="topbar">
-  <a class="logo" href="index.html">◆ <span>Shaar</span></a>
+  <a class="logo" href="index.html">
+    <svg class="logo-mark" viewBox="0 0 32 40" width="26" height="32" aria-hidden="true" fill="none"
+         stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 37V16a12 12 0 0 1 24 0v21"/>
+      <rect x="10" y="15" width="12" height="19" rx="2"/>
+      <circle cx="16" cy="22.6" r="2.1"/><circle cx="16" cy="26.4" r="2.1"/>
+      <circle cx="14.1" cy="24.5" r="2.1"/><circle cx="17.9" cy="24.5" r="2.1"/>
+      <path d="M2 37h28"/>
+    </svg>
+    <span>TESSERA</span>
+  </a>
   <nav class="nav">
     <a href="index.html">Eventos</a>
     <a href="mercado.html">Mercado</a>
-    <a href="ingressos.html" class="active">Meus Ingressos</a>
+    <a href="ingressos.html" class="active">Minha Coleção</a>
     <a href="organizador.html">Organizador</a>
     <a href="admin.html">Admin</a>
     <a href="checkin.html">Check-in</a>
   </nav>
+  <button class="theme-toggle" onclick="toggleTheme()" aria-label="Alternar tema claro/escuro" type="button">
+    <svg class="ico theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sol"/></svg>
+    <svg class="ico theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-lua"/></svg>
+  </button>
   <span class="badge purple">gabriel@email.com</span>
 </header>
 
 <main class="container" style="max-width:860px;">
-  <h1 class="page-title">Meus Ingressos</h1>
+  <h1 class="page-title">Minha <span class="em-laranja">coleção</span></h1>
+  <p class="page-sub">Cada ingresso é uma peça da sua história. Os que já foram vividos ficam guardados como lembrança.</p>
 
   <!-- Saldo de revendas -->
-  <div class="ticket" style="border-color:rgba(46,204,113,.4);">
-    <div class="thumb" style="background:rgba(46,204,113,.12); font-size:24px;">💰</div>
+  <div class="ticket">
+    <div class="thumb" style="background:rgba(79,191,139,.12); color:var(--text-success);">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-moeda"/></svg>
+    </div>
     <div class="info">
       <h3>Saldo de vendas: R$ 165,00</h3>
       <div class="meta">Proventos de revendas. Saque pra sua conta via PIX ou use pra comprar ingressos.</div>
@@ -38,9 +85,11 @@
 
   <!-- Ingresso válido -->
   <div class="ticket">
-    <div class="thumb g1">🎸</div>
+    <div class="thumb g1">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-portal"/></svg>
+    </div>
     <div class="info">
-      <h3>Show da Banda Aurora <span class="badge green">VÁLIDO</span></h3>
+      <h3>Show da Banda Aurora <span class="badge green">Válido</span></h3>
       <div class="meta">
         Ingresso <b style="color:var(--text)">#143 de 500</b> · Pista · 12/08/2026 20h<br>
         comprado por R$ 250
@@ -54,9 +103,11 @@
 
   <!-- Ingresso listado -->
   <div class="ticket">
-    <div class="thumb g3">💻</div>
+    <div class="thumb g3">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-ticket"/></svg>
+    </div>
     <div class="info">
-      <h3>Conf. Web3 Brasil <span class="badge yellow">À VENDA NO MERCADO</span></h3>
+      <h3>Conf. Web3 Brasil <span class="badge yellow">À venda no mercado</span></h3>
       <div class="meta">
         Ingresso <b style="color:var(--text)">#27 de 300</b> · Credencial · 03/10/2026 9h<br>
         Listado por <b style="color:var(--text)">R$ 165,00</b> · expira em 6 dias
@@ -70,9 +121,13 @@
 
   <!-- Ingresso lembrança -->
   <div class="ticket frozen">
-    <div class="thumb g2">🎪</div>
+    <div class="thumb g2">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-quadrifolio"/></svg>
+    </div>
     <div class="info">
-      <h3>Festival Maré Alta 2025 <span class="badge gray">🔒 LEMBRANÇA</span></h3>
+      <h3>Festival Maré Alta 2025
+        <span class="badge gray"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:12px;height:12px;"><use href="#i-cadeado"/></svg> Lembrança</span>
+      </h3>
       <div class="meta">
         Ingresso <b style="color:var(--text)">#87 de 2.000</b> · check-in em 21/09/2025 14:32<br>
         Lembrança do evento — não pode ser revendido
@@ -87,7 +142,7 @@
     <h3>Show da Banda Aurora — #143</h3>
     <div class="qr"></div>
     <div class="meta" style="margin-top:14px;">
-      QR rotativo — expira em <b style="color:var(--yellow)">0:47</b><br>
+      QR rotativo — expira em <b style="color:var(--text-warning)">0:47</b><br>
       Apresente na entrada. Não compartilhe print.
     </div>
     <a class="btn ghost" style="margin-top:16px;" href="#">Fechar</a>
@@ -99,10 +154,10 @@
   <div class="box">
     <h3>Revender ingresso #143</h3>
     <div class="meta" style="margin-bottom:10px;">Show da Banda Aurora · preço original: R$ 250</div>
-    <label class="meta">Preço de venda (R$)</label>
-    <input class="field" style="width:100%; margin:6px 0 14px;" value="308,00">
-    <label class="meta">Expira em</label>
-    <select class="field" style="width:100%; margin:6px 0 14px;">
+    <label class="meta" for="preco-venda">Preço de venda (R$)</label>
+    <input class="field" id="preco-venda" style="width:100%; margin:6px 0 14px;" value="308,00">
+    <label class="meta" for="expira-em">Expira em</label>
+    <select class="field" id="expira-em" style="width:100%; margin:6px 0 14px;">
       <option>7 dias</option><option>24 horas</option><option>Sem expiração</option>
     </select>
     <div class="split">
@@ -115,7 +170,7 @@
       <b>R$ 261,80</b> você (85%) · <b>R$ 30,80</b> royalty organizador (10%) · <b>R$ 15,40</b> plataforma (5%)
     </div>
     <div style="display:flex; gap:10px; margin-top:16px;">
-      <a class="btn" style="flex:1; text-align:center;" href="mercado.html">Listar no mercado</a>
+      <a class="btn" style="flex:1;" href="mercado.html">Listar no mercado</a>
       <a class="btn ghost" href="#">Cancelar</a>
     </div>
   </div>
@@ -126,15 +181,15 @@
   <div class="box">
     <h3>Sacar via PIX</h3>
     <div class="meta" style="margin-bottom:12px;">Saldo disponível: <b style="color:var(--text)">R$ 165,00</b></div>
-    <label class="meta">Valor do saque (R$)</label>
-    <input class="field" style="width:100%; margin:6px 0 12px;" value="165,00">
-    <label class="meta">Chave PIX</label>
-    <input class="field" style="width:100%; margin:6px 0 14px;" placeholder="CPF, email ou chave aleatória">
+    <label class="meta" for="valor-saque">Valor do saque (R$)</label>
+    <input class="field" id="valor-saque" style="width:100%; margin:6px 0 12px;" value="165,00">
+    <label class="meta" for="chave-pix">Chave PIX</label>
+    <input class="field" id="chave-pix" style="width:100%; margin:6px 0 14px;" placeholder="CPF, email ou chave aleatória">
     <div class="split">
       Taxa de conversão: <b>1%</b> · Você recebe: <b>R$ 163,35</b>
     </div>
     <div style="display:flex; gap:10px; margin-top:16px;">
-      <a class="btn green" style="flex:1; text-align:center;" href="#">Confirmar saque</a>
+      <a class="btn green" style="flex:1;" href="#">Confirmar saque</a>
       <a class="btn ghost" href="#">Cancelar</a>
     </div>
     <div class="meta" style="font-size:11px; margin-top:12px;">

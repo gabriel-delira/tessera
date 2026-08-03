@@ -30,18 +30,29 @@ export async function POST(
     return NextResponse.json({ error: "Listing is not active" }, { status: 409 });
   }
 
+  // Cancelar com negociação aberta a esvazia — senão o comprador fica
+  // esperando resposta de um anúncio que não existe mais (§6).
+  const declineOpenNegotiations = prisma.negotiation.updateMany({
+    where: { listingId: id, status: "OPEN" },
+    data:  { status: "DECLINED" },
+  });
+
   if (listing.onchainListingId === null) {
     // Listing never made it on-chain — safe to cancel immediately; no escrow to return.
     await prisma.$transaction([
       prisma.listing.update({ where: { id }, data: { status: "CANCELLED" } }),
       prisma.ticket.updateMany({ where: { tokenId: listing.tokenId, status: "LISTED" }, data: { status: "VALID" } }),
+      declineOpenNegotiations,
     ]);
     return NextResponse.json({ ok: true, message: "Listing cancelled (not yet on-chain)" });
   }
 
   // Mark as CANCELLING — ticket stays LISTED until on-chain ListingCancelled is observed.
   // The indexer's syncTicketResale will set Listing=CANCELLED and Ticket=VALID.
-  await prisma.listing.update({ where: { id }, data: { status: "CANCELLING" } });
+  await prisma.$transaction([
+    prisma.listing.update({ where: { id }, data: { status: "CANCELLING" } }),
+    declineOpenNegotiations,
+  ]);
 
   const { resale } = getAddresses();
   const cancelCalldata = getCancelListingCalldata(listing.onchainListingId);

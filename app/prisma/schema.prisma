@@ -69,6 +69,54 @@ enum WithdrawalStatus {
   FAILED
 }
 
+enum EventCategory {
+  SHOW
+  FESTIVAL
+  TEATRO
+  ESPORTE
+  CONFERENCIA
+  OUTRO
+}
+
+// LAYOUT_UPDATE.md §5.6.1 — escada de identificação. NONE→IDENTIFIED exigido na
+// 1a compra; IDENTIFIED→VERIFIED (KYC completo) exigido no 1o anúncio de revenda.
+enum KycLevel {
+  NONE
+  IDENTIFIED
+  VERIFIED
+}
+
+// LAYOUT_UPDATE.md §5.7 — dois fluxos de recebimento, escolhidos pelo destinatário.
+enum PayoutMethod {
+  PIX
+  CRYPTO
+}
+
+// LAYOUT_UPDATE.md §7.1 — ledger de crédito/débito. Saldo é sempre SUM(amountBrl),
+// nunca um campo denormalizado escrito por fora.
+enum LedgerEntryType {
+  RESALE_PAYOUT
+  ROYALTY_PAYOUT
+  WITHDRAWAL
+  WITHDRAWAL_REVERSAL
+  ADJUSTMENT
+}
+
+// LAYOUT_UPDATE.md §6 — negociação P2P sobre um Listing de revenda. Nunca sobre
+// venda primária.
+enum NegotiationParty {
+  BUYER
+  SELLER
+}
+
+enum NegotiationStatus {
+  OPEN
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  SUPERSEDED
+}
+
 model User {
   id             String     @id @default(cuid())
   privyId        String     @unique @map("privy_id")
@@ -77,10 +125,25 @@ model User {
   role           UserRole   @default(BUYER)
   createdAt      DateTime   @default(now()) @map("created_at")
 
-  organizer   Organizer?
-  purchases   Purchase[]
-  withdrawals Withdrawal[]
-  checkins    Checkin[]
+  // Identidade — LAYOUT_UPDATE.md §5.6.1 e §5.8
+  cpf            String?    @unique
+  displayName    String?    @map("display_name")   // controlado: não pode imitar identidade verificada de terceiro
+  kycLevel       KycLevel   @default(NONE) @map("kyc_level")
+  kycVerifiedAt  DateTime?  @map("kyc_verified_at")
+  verified       Boolean    @default(false)         // selo público "Verified" — identidade confirmada, não endosso
+
+  // Recebimento — LAYOUT_UPDATE.md §5.7.1. payoutWallet NÃO existe (§5.7.3):
+  // no fluxo CRYPTO o destino é sempre walletAddress, a carteira que anunciou.
+  payoutMethod   PayoutMethod @default(PIX) @map("payout_method")
+  pixKey         String?      @map("pix_key")
+  pixKeyUpdatedAt DateTime?   @map("pix_key_updated_at")
+
+  organizer     Organizer?
+  purchases     Purchase[]
+  withdrawals   Withdrawal[]
+  checkins      Checkin[]
+  ledgerEntries LedgerEntry[]
+  negotiations  Negotiation[]
 
   @@map("users")
 }
@@ -92,6 +155,7 @@ model Organizer {
   document      String          // CNPJ
   payoutWallet  String          @map("payout_wallet")
   status        OrganizerStatus @default(PENDING)
+  kybVerifiedAt DateTime?       @map("kyb_verified_at")  // LAYOUT_UPDATE.md §5.6.1 — exigido antes do 1o evento
   createdAt     DateTime        @default(now()) @map("created_at")
 
   user   User    @relation(fields: [userId], references: [id])
@@ -107,7 +171,10 @@ model Event {
   description          String?
   venue                String
   city                 String
+  latitude             Float?      // geocodificado via Nominatim (OSM) a partir de venue+city na criação/edição do evento
+  longitude            Float?
   coverImageUrl        String?     @map("cover_image_url")
+  coverVideoUrl        String?     @map("cover_video_url") // usado só no carrossel de destaque (LAYOUT_UPDATE.md §4.1); nunca no grid de cards
   eventDate            DateTime    @map("event_date")
   ticketPriceUsdc      Decimal     @map("ticket_price_usdc") @db.Decimal(18, 6)
   maxTickets           Int?        @map("max_tickets")
@@ -119,6 +186,17 @@ model Event {
   royaltySplitterAddr  String?     @map("royalty_splitter_address")
   createTxHash         String?     @map("create_tx_hash")
   createdAt            DateTime    @default(now()) @map("created_at")
+
+  // Dados de evento — LAYOUT_UPDATE.md §3.1
+  category      EventCategory @default(OUTRO)
+  subcategory   String?
+  lineup        String?
+  doorsOpenAt   DateTime?     @map("doors_open_at")
+  featuredRank  Int?          @map("featured_rank")   // pin do admin; null = concorre pelo ranking automático
+
+  // Teto de revenda — LAYOUT_UPDATE.md §5.5. null = sem teto (mercado livre).
+  // Basis points sobre Ticket.facePrice, nunca sobre o preço atual do evento.
+  maxResaleBps  Int?          @map("max_resale_bps")
 
   organizer Organizer  @relation(fields: [organizerId], references: [id])
   tickets   Ticket[]
@@ -159,8 +237,9 @@ model Listing {
   txHash           String?       @map("tx_hash")
   createdAt        DateTime      @default(now()) @map("created_at")
 
-  ticket    Ticket     @relation(fields: [tokenId], references: [tokenId])
-  purchases Purchase[]
+  ticket        Ticket         @relation(fields: [tokenId], references: [tokenId])
+  purchases     Purchase[]
+  negotiations  Negotiation[]
 
   @@map("listings")
 }
@@ -187,6 +266,7 @@ model Purchase {
   event   Event    @relation(fields: [eventId], references: [id])
   listing Listing? @relation(fields: [listingId], references: [id])
   ticket  Ticket?  @relation(fields: [tokenId], references: [tokenId])
+  ledgerEntries LedgerEntry[]
 
   @@map("purchases")
 }
@@ -203,6 +283,7 @@ model Withdrawal {
   createdAt          DateTime         @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id])
+  ledgerEntries LedgerEntry[]
 
   @@map("withdrawals")
 }
@@ -225,4 +306,64 @@ model SyncState {
   lastProcessedBlock BigInt @map("last_processed_block")
 
   @@map("sync_state")
+}
+
+// LAYOUT_UPDATE.md §7 — saldo é sempre SUM(amountBrl) por usuário, nunca lido de
+// um campo denormalizado. onchainTxHash aponta para a tx de settle que gravou o
+// atestado do split (§5.7.2) — é o que a UI usa para marcar "conferido on-chain".
+model LedgerEntry {
+  id            String          @id @default(cuid())
+  userId        String          @map("user_id")
+  type          LedgerEntryType
+  amountBrl     Decimal         @map("amount_brl") @db.Decimal(10, 2)
+  description   String
+  purchaseId    String?         @map("purchase_id")
+  withdrawalId  String?         @map("withdrawal_id")
+  onchainTxHash String?         @map("onchain_tx_hash")
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  user       User        @relation(fields: [userId], references: [id])
+  purchase   Purchase?   @relation(fields: [purchaseId], references: [id])
+  withdrawal Withdrawal? @relation(fields: [withdrawalId], references: [id])
+
+  @@index([userId, createdAt])
+  @@map("ledger_entries")
+}
+
+// LAYOUT_UPDATE.md §6 — negociação assíncrona sobre um Listing de revenda.
+// Um comprador só pode ter uma thread aberta por anúncio; várias threads
+// concorrentes (compradores distintos) são permitidas — a primeira que fecha
+// leva, as demais viram SUPERSEDED na mesma transação (§6.3).
+model Negotiation {
+  id          String            @id @default(cuid())
+  listingId   String            @map("listing_id")
+  buyerUserId String            @map("buyer_user_id")
+  status      NegotiationStatus @default(OPEN)
+  turn        NegotiationParty
+  roundCount  Int               @default(1) @map("round_count")
+  expiresAt   DateTime          @map("expires_at")
+  agreedPrice Decimal?          @map("agreed_price") @db.Decimal(18, 6)
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  listing Listing            @relation(fields: [listingId], references: [id])
+  buyer   User               @relation(fields: [buyerUserId], references: [id])
+  rounds  NegotiationRound[]
+
+  @@unique([listingId, buyerUserId])
+  @@index([listingId, status])
+  @@map("negotiations")
+}
+
+model NegotiationRound {
+  id            String           @id @default(cuid())
+  negotiationId String           @map("negotiation_id")
+  roundNumber   Int              @map("round_number")
+  author        NegotiationParty
+  priceUsdc     Decimal          @map("price_usdc") @db.Decimal(18, 6)
+  createdAt     DateTime         @default(now()) @map("created_at")
+
+  negotiation Negotiation @relation(fields: [negotiationId], references: [id])
+
+  @@map("negotiation_rounds")
 }

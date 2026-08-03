@@ -35,6 +35,11 @@ export async function POST(
     return NextResponse.json({ error: "No wallet linked to account" }, { status: 409 });
   }
 
+  // LAYOUT_UPDATE.md §5.6.1 — identificação (CPF) exigida na 1a compra.
+  if (!user.cpf) {
+    return NextResponse.json({ error: "Identification required", code: "IDENTIFICATION_REQUIRED" }, { status: 403 });
+  }
+
   // Capacity check: minted tickets + in-flight purchases must not exceed maxTickets.
   // The on-chain contract is the final guard, but checking here avoids charging a
   // buyer for a ticket that would revert at mint time. null maxTickets = unlimited.

@@ -11,4 +11,6 @@ process.env.PSP_PROVIDER = "mock";
 process.env.FX_MID_RATE = "5.50";
 process.env.FX_SPREAD_BPS = "300";
 
-process.env.NODE_ENV = "test";
+// @types/node marca NODE_ENV como readonly nesta versão; o valor em runtime
+// continua gravável (é só o tipo que mudou), daí o cast em vez de remover a linha.
+(process.env as { NODE_ENV: string }).NODE_ENV = "test";

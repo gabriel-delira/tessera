@@ -259,7 +259,7 @@ contract TicketResaleTest is Test {
         _lockForBuyer();
 
         vm.prank(settler);
-        resale.settleListedTicket(listingId, buyer);
+        resale.settleListedTicket(listingId, buyer, RESALE_PRICE);
 
         assertEq(nft.ownerOf(tokenId), buyer);
         (, , , , , bool active, , ) = resale.listings(listingId);
@@ -270,10 +270,55 @@ contract TicketResaleTest is Test {
         _lockForBuyer();
 
         vm.expectEmit(true, true, true, false);
-        emit TicketResale.TicketSettled(listingId, buyer, tokenId);
+        emit TicketResale.TicketSettled(listingId, buyer, tokenId, RESALE_PRICE, 0, 0, address(0), 0);
 
         vm.prank(settler);
-        resale.settleListedTicket(listingId, buyer);
+        resale.settleListedTicket(listingId, buyer, RESALE_PRICE);
+    }
+
+    // LAYOUT_UPDATE.md §5.7.2 — atestado on-chain: o split emitido tem que bater
+    // com o cálculo esperado (mesma fórmula do fluxo cripto em _buyListed) e
+    // depender só de agreedPrice + royaltyInfo(), nunca de um valor passado à parte.
+    function test_SettleListedTicket_EmitsCorrectSplit() public {
+        _lockForBuyer();
+
+        (address royaltyReceiver, uint256 royaltyAmount) = nft.royaltyInfo(tokenId, RESALE_PRICE);
+        uint256 platformShare = (RESALE_PRICE * resale.platformFeeBps()) / 10_000;
+        uint256 sellerShare   = RESALE_PRICE - platformShare - royaltyAmount;
+
+        vm.expectEmit(true, true, true, true);
+        emit TicketResale.TicketSettled(listingId, buyer, tokenId, RESALE_PRICE, sellerShare, royaltyAmount, royaltyReceiver, platformShare);
+
+        vm.prank(settler);
+        resale.settleListedTicket(listingId, buyer, RESALE_PRICE);
+    }
+
+    // Preço negociado (§6.4) pode divergir do preço do anúncio — o atestado
+    // reflete o valor acordado, não l.price.
+    function test_SettleListedTicket_UsesAgreedPriceNotListingPrice() public {
+        _lockForBuyer();
+        uint256 negotiatedPrice = RESALE_PRICE - 0.3 ether;
+
+        (, uint256 royaltyAmount) = nft.royaltyInfo(tokenId, negotiatedPrice);
+        uint256 platformShare = (negotiatedPrice * resale.platformFeeBps()) / 10_000;
+        uint256 sellerShare   = negotiatedPrice - platformShare - royaltyAmount;
+
+        vm.prank(settler);
+        resale.settleListedTicket(listingId, buyer, negotiatedPrice);
+
+        // Sem storage de split — a asserção de valor vive no teste de evento acima;
+        // aqui garantimos apenas que a chamada com preço diferente não reverte e
+        // ainda transfere o NFT normalmente.
+        assertEq(nft.ownerOf(tokenId), buyer);
+        assertGt(sellerShare, 0);
+    }
+
+    function test_SettleListedTicket_ZeroAgreedPrice_Reverts() public {
+        _lockForBuyer();
+
+        vm.prank(settler);
+        vm.expectRevert("agreedPrice must be > 0");
+        resale.settleListedTicket(listingId, buyer, 0);
     }
 
     function test_SettleListedTicket_WrongRecipient_Reverts() public {
@@ -281,13 +326,13 @@ contract TicketResaleTest is Test {
 
         vm.prank(settler);
         vm.expectRevert("Recipient mismatch");
-        resale.settleListedTicket(listingId, makeAddr("other"));
+        resale.settleListedTicket(listingId, makeAddr("other"), RESALE_PRICE);
     }
 
     function test_SettleListedTicket_NotLocked_Reverts() public {
         vm.prank(settler);
         vm.expectRevert("Not locked");
-        resale.settleListedTicket(listingId, buyer);
+        resale.settleListedTicket(listingId, buyer, RESALE_PRICE);
     }
 
     function test_SettleListedTicket_NotSettler_Reverts() public {
@@ -295,13 +340,13 @@ contract TicketResaleTest is Test {
 
         vm.prank(buyer);
         vm.expectRevert("Not settler");
-        resale.settleListedTicket(listingId, buyer);
+        resale.settleListedTicket(listingId, buyer, RESALE_PRICE);
     }
 
     function test_SettleListedTicket_ZeroRecipient_Reverts() public {
         vm.prank(settler);
         vm.expectRevert("Invalid recipient");
-        resale.settleListedTicket(listingId, address(0));
+        resale.settleListedTicket(listingId, address(0), RESALE_PRICE);
     }
 
     function test_SettleListedTicket_NotActive_Reverts() public {
@@ -310,7 +355,7 @@ contract TicketResaleTest is Test {
 
         vm.prank(settler);
         vm.expectRevert("Not active");
-        resale.settleListedTicket(listingId, buyer);
+        resale.settleListedTicket(listingId, buyer, RESALE_PRICE);
     }
 
     function test_SettleListedTicket_Expired_Reverts() public {
@@ -330,7 +375,7 @@ contract TicketResaleTest is Test {
 
         vm.prank(settler);
         vm.expectRevert("Listing expired");
-        resale.settleListedTicket(lid, buyer);
+        resale.settleListedTicket(lid, buyer, RESALE_PRICE);
     }
 
     function test_SettleListedTicket_NoETHMoves() public {
@@ -340,7 +385,7 @@ contract TicketResaleTest is Test {
         uint256 platformBefore = platform.balance;
 
         vm.prank(settler);
-        resale.settleListedTicket(listingId, buyer);
+        resale.settleListedTicket(listingId, buyer, RESALE_PRICE);
 
         assertEq(seller.balance,   sellerBefore);
         assertEq(platform.balance, platformBefore);

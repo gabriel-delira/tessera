@@ -1,6 +1,6 @@
 **Face value** = o preço original de venda definido pelo organizador. A ideia do teto seria: "ninguém pode revender por mais de, ex., 200% do face value" — se o ingresso custou R$100, o teto seria R$200. Evita que cambistas marquem por 5x. Você quer esse teto ou deixa o mercado livre?
 
-**Float USDC** = toda vez que alguém compra ingresso em BRL, a Shaar precisa de USDC para pagar as operações on-chain (gas, mint). A questão é: você mantém um saldo de USDC pré-comprado e monitora manualmente quando está baixo, ou cria uma rotina automática que recompra USDC quando o saldo cai abaixo de X? É uma questão operacional de tesouraria. Para MVP pode ser manual; em escala vira automático.
+**Float USDC** = toda vez que alguém compra ingresso em BRL, a Tessera precisa de USDC para pagar as operações on-chain (gas, mint). A questão é: você mantém um saldo de USDC pré-comprado e monitora manualmente quando está baixo, ou cria uma rotina automática que recompra USDC quando o saldo cai abaixo de X? É uma questão operacional de tesouraria. Para MVP pode ser manual; em escala vira automático.
 
 **PSP** — minha recomendação é **Pagar.me**. Razão: tem PIX nativo, tem API de marketplace com split de pagamento (você repassa direto para o organizador na mesma transação, sem precisar fazer transferência manual depois). Stone tem rates bons mas a API de marketplace é menos madura. Stripe não é ideal para MVP com foco em PIX. Alguma restrição com Pagar.me?
 
@@ -26,15 +26,15 @@ Vou responder os pontos que precisam de explicação antes de atualizar.
 
 **Nota fiscal** — em toda venda de produto/serviço no Brasil precisa emitir NF. A questão é: quem é o "vendedor" na transação? Duas opções:
 
-- **Shaar emite**: Shaar é o vendedor, coleta e paga ISS/PIS/COFINS de cada ingresso. Mais simples pro organizador, mas todo o peso fiscal cai na Shaar.
-- **Organizador emite**: organizador é o vendedor, Shaar é intermediário. Organizador emite NF do ingresso, Shaar emite NF só da sua taxa de 8%. É como a Sympla funciona — mais correto fiscalmente mas exige que o organizador tenha CNPJ e regime fiscal ativo.
+- **Tessera emite**: Tessera é o vendedor, coleta e paga ISS/PIS/COFINS de cada ingresso. Mais simples pro organizador, mas todo o peso fiscal cai na Tessera.
+- **Organizador emite**: organizador é o vendedor, Tessera é intermediário. Organizador emite NF do ingresso, Tessera emite NF só da sua taxa de 8%. É como a Sympla funciona — mais correto fiscalmente mas exige que o organizador tenha CNPJ e regime fiscal ativo.
 
 **Custódia / VASP** — A ideia de entregar a chave pro usuário e manter backup _ainda_ te enquadra como custodiante pelo BACEN, porque você conseguiria movimentar o ativo sem consentimento do usuário (você tem a cópia). Não resolve o problema legal. Mas a validação offline que você quer resolver **não precisa envolver a chave privada do NFT** — são duas coisas separadas:
 
 - **Chave do NFT** (controla o ativo on-chain) → fica no AWS KMS, usuário nunca vê
-- **Credencial de validação** (prova que pode entrar no evento) → é um JWT de curta duração assinado pelo backend da Shaar, que o app pode cachear localmente e usar offline
+- **Credencial de validação** (prova que pode entrar no evento) → é um JWT de curta duração assinado pelo backend da Tessera, que o app pode cachear localmente e usar offline
 
-O scanner da portaria valida o JWT offline com a chave pública da Shaar gravada nele. Sem precisar de rede, sem precisar dar a chave privada pro usuário.
+O scanner da portaria valida o JWT offline com a chave pública da Tessera gravada nele. Sem precisar de rede, sem precisar dar a chave privada pro usuário.
 
 **LGPD** — minimização de dados é um princípio central da LGPD e reduz sua exposição sim. Se você coleta só CPF (fiscal), email (comunicação), histórico de compra (prestação do serviço) e tem base legal clara para cada um — você está bem posicionado. Mas ainda precisa de: política de privacidade publicada, prazo de retenção definido, e acima de certo volume de dados pessoais, indicação de um DPO (pode ser externo). Não é uma preocupação de desenvolvimento agora, mas precisa estar pronto antes do lançamento.
 

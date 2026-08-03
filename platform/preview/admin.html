@@ -3,22 +3,68 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Painel Admin — Shaar</title>
+<title>Tessera — Painel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="theme.js"></script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <g id="i-check" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12.5 9.5 18 20 6.5"/>
+  </g>
+  <g id="i-cadeado" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+    <rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>
+  </g>
+  <g id="i-relogio" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+    <circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>
+  </g>
+  <g id="i-coluna" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+    <path d="M5 6h14M7 6v12M12 6v12M17 6v12M4 18h16"/>
+  </g>
+  <g id="i-pausar" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    <path d="M9.5 6v12M14.5 6v12"/>
+  </g>
+  <g id="i-play" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+    <path d="M8 5.5v13l11-6.5-11-6.5Z"/>
+  </g>
+  <g id="i-sol" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+    <circle cx="12" cy="12" r="4.2"/>
+    <path d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/>
+  </g>
+  <g id="i-lua" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+    <path d="M20 14.2A8.5 8.5 0 1 1 9.8 4a7 7 0 0 0 10.2 10.2Z"/>
+  </g>
+</defs></svg>
+
 <header class="topbar">
-  <a class="logo" href="index.html">◆ <span>Shaar</span></a>
+  <a class="logo" href="index.html">
+    <svg class="logo-mark" viewBox="0 0 32 40" width="26" height="32" aria-hidden="true" fill="none"
+         stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 37V16a12 12 0 0 1 24 0v21"/>
+      <rect x="10" y="15" width="12" height="19" rx="2"/>
+      <circle cx="16" cy="22.6" r="2.1"/><circle cx="16" cy="26.4" r="2.1"/>
+      <circle cx="14.1" cy="24.5" r="2.1"/><circle cx="17.9" cy="24.5" r="2.1"/>
+      <path d="M2 37h28"/>
+    </svg>
+    <span>TESSERA</span>
+  </a>
   <nav class="nav">
     <a href="index.html">Eventos</a>
     <a href="mercado.html">Mercado</a>
-    <a href="ingressos.html">Meus Ingressos</a>
+    <a href="ingressos.html">Minha Coleção</a>
     <a href="organizador.html">Organizador</a>
     <a href="admin.html" class="active">Admin</a>
     <a href="checkin.html">Check-in</a>
   </nav>
-  <span class="badge red">ADMIN</span>
+  <button class="theme-toggle" onclick="toggleTheme()" aria-label="Alternar tema claro/escuro" type="button">
+    <svg class="ico theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sol"/></svg>
+    <svg class="ico theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-lua"/></svg>
+  </button>
+  <span class="badge red">Admin</span>
 </header>
 
 <main class="container">
@@ -37,34 +83,40 @@
     </div>
     <div class="stat">
       <div class="label">Pendências</div>
-      <div class="value" style="color:var(--yellow);">3</div>
-      <div class="delta" style="color:var(--muted);">2 eventos · 1 organizador</div>
+      <div class="value" style="color:var(--text-warning);">3</div>
+      <div class="delta" style="color:var(--text-muted);">2 eventos · 1 organizador</div>
     </div>
     <div class="stat">
       <div class="label">Sistema</div>
-      <div class="value" style="color:var(--green); font-size:16px;">● operacional</div>
-      <div class="delta" style="color:var(--muted);">sincronizado</div>
+      <div class="value" style="color:var(--text-success); font-size:18px;">Operacional</div>
+      <div class="delta" style="color:var(--text-muted);">sincronizado</div>
     </div>
   </div>
 
   <div class="panel" style="margin-bottom:24px;">
-    <div class="panel-head">⏳ Fila de aprovação — Eventos</div>
+    <div class="panel-head">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color:var(--text-accent);"><use href="#i-relogio"/></svg>
+      Fila de aprovação — Eventos
+    </div>
     <table>
       <tr><th>Evento</th><th>Organizador</th><th>Data</th><th>Preço</th><th>Capacidade</th><th>Royalty</th><th>Ações</th></tr>
       <tr>
         <td><b>Aurora — Tour 2027</b></td>
-        <td>Produtora ABC ✓</td>
-        <td>14/03/2027</td><td>R$ 250</td><td>500</td><td>10%</td>
         <td>
+          Produtora ABC
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:12px;height:12px;color:var(--text-success);"><use href="#i-check"/></svg>
+        </td>
+        <td>14/03/2027</td><td>R$ 250</td><td>500</td><td>10%</td>
+        <td style="display:flex; gap:8px;">
           <a class="btn sm green" href="#modal-aprovar">Aprovar</a>
           <a class="btn sm danger" href="#">Rejeitar</a>
         </td>
       </tr>
       <tr>
         <td><b>Stand-up do Zé</b></td>
-        <td>Zé Produções <span class="badge yellow">NOVO</span></td>
+        <td>Zé Produções <span class="badge yellow">Novo</span></td>
         <td>02/12/2026</td><td>R$ 100</td><td>150</td><td>5%</td>
-        <td>
+        <td style="display:flex; gap:8px;">
           <a class="btn sm green" href="#modal-aprovar">Aprovar</a>
           <a class="btn sm danger" href="#">Rejeitar</a>
         </td>
@@ -73,14 +125,17 @@
   </div>
 
   <div class="panel" style="margin-bottom:24px;">
-    <div class="panel-head">⏳ Fila de aprovação — Organizadores</div>
+    <div class="panel-head">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color:var(--text-accent);"><use href="#i-coluna"/></svg>
+      Fila de aprovação — Organizadores
+    </div>
     <table>
       <tr><th>Empresa</th><th>CNPJ</th><th>Contato</th><th>Ações</th></tr>
       <tr>
         <td><b>Zé Produções</b></td>
         <td>12.345.678/0001-90</td>
         <td>ze@zeproducoes.com</td>
-        <td>
+        <td style="display:flex; gap:8px;">
           <a class="btn sm green" href="#">Aprovar</a>
           <a class="btn sm danger" href="#">Rejeitar</a>
         </td>
@@ -94,27 +149,42 @@
       <tr><th>Evento</th><th>Status</th><th>Vendidos</th><th>Ações</th></tr>
       <tr>
         <td>Festival Maré Alta 2025</td>
-        <td><span class="badge gray">🔒 ENCERRADO</span></td>
+        <td>
+          <span class="badge gray">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:12px;height:12px;"><use href="#i-cadeado"/></svg>
+            Encerrado
+          </span>
+        </td>
         <td>2.000/2.000</td>
         <td><span class="meta">encerrado</span></td>
       </tr>
       <tr>
         <td>Show da Banda Aurora</td>
-        <td><span class="badge green">EM VENDA</span></td>
+        <td><span class="badge green">Em venda</span></td>
         <td>142/500</td>
-        <td><a class="btn sm ghost" href="#">⏸ pausar vendas</a></td>
+        <td>
+          <a class="btn sm ghost" href="#">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pausar"/></svg>
+            pausar vendas
+          </a>
+        </td>
       </tr>
       <tr>
         <td>Festival Maré Alta</td>
-        <td><span class="badge red">ESGOTADO</span></td>
+        <td><span class="badge red">Esgotado</span></td>
         <td>2.000/2.000</td>
         <td><a class="btn sm ghost" href="#">encerrar evento</a></td>
       </tr>
       <tr>
         <td>Peça: O Último Bloco</td>
-        <td><span class="badge yellow">PAUSADO</span></td>
+        <td><span class="badge yellow">Pausado</span></td>
         <td>12/200</td>
-        <td><a class="btn sm ghost" href="#">▶ retomar vendas</a></td>
+        <td>
+          <a class="btn sm ghost" href="#">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-play"/></svg>
+            retomar vendas
+          </a>
+        </td>
       </tr>
     </table>
   </div>
@@ -130,7 +200,7 @@
       Taxa plataforma: 8% · Royalty revenda: 10%
     </div>
     <div style="display:flex; gap:10px; margin-top:16px;">
-      <a class="btn green" style="flex:1; text-align:center;" href="index.html">Aprovar e publicar</a>
+      <a class="btn green" style="flex:1;" href="index.html">Aprovar e publicar</a>
       <a class="btn ghost" href="#">Cancelar</a>
     </div>
   </div>

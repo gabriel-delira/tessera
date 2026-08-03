@@ -10,15 +10,15 @@ import { psp } from "@/lib/psp";
 
 const POLL_INTERVAL_MS      = 4_000;          // 4 s — fine for Anvil/Base (2 s block time)
 const RECONCILE_INTERVAL_MS = 5 * 60 * 1_000; // 5 min
-const BLOCK_BATCH           = 2_000n;
+const BLOCK_BATCH           = BigInt(2_000);
 
 async function getLastBlock(contractAddress: string): Promise<bigint> {
   const state = await prisma.syncState.findUnique({ where: { contractAddress } });
   if (state) return state.lastProcessedBlock;
   const startBlock = process.env.INDEXER_START_BLOCK;
-  if (startBlock) return BigInt(startBlock) - 1n;
+  if (startBlock) return BigInt(startBlock) - BigInt(1);
   const current = await publicClient.getBlockNumber();
-  return current - 1n;
+  return current - BigInt(1);
 }
 
 async function setLastBlock(contractAddress: string, block: bigint) {
@@ -39,14 +39,14 @@ async function syncTicketSale(saleAddress: `0x${string}`) {
   const logs = await publicClient.getLogs({
     address:   saleAddress,
     event:     TICKET_SALE_ABI.find((x) => x.type === "event" && x.name === "TicketSold") as never,
-    fromBlock: from + 1n,
+    fromBlock: from + BigInt(1),
     toBlock:   to,
   });
 
   for (const log of logs) {
-    const { eventId, buyer, tokenId } = log.args as {
+    const { eventId, buyer, tokenId } = (log as unknown as { args: {
       eventId: bigint; buyer: string; tokenId: bigint; amount: bigint;
-    };
+    } }).args;
     // Upsert the event's soldTickets cache (best-effort; source of truth is chain)
     await prisma.event.updateMany({
       where: { onchainEventId: Number(eventId) },
@@ -67,7 +67,7 @@ async function syncTicketSale(saleAddress: `0x${string}`) {
             ticketNumber,
             facePrice:    event.ticketPriceUsdc,
             status:       "VALID",
-            mintTxHash:   log.transactionHash,
+            mintTxHash:   (log as unknown as { transactionHash: string }).transactionHash,
             mintedAt:     new Date(),
           },
         }).catch(() => {}); // ignore duplicate on race
@@ -89,14 +89,14 @@ async function syncTicketNFT(nftAddress: `0x${string}`, resaleAddress: `0x${stri
   const transferLogs = await publicClient.getLogs({
     address:   nftAddress,
     event:     TICKET_NFT_ABI.find((x) => x.type === "event" && x.name === "Transfer") as never,
-    fromBlock: from + 1n,
+    fromBlock: from + BigInt(1),
     toBlock:   to,
   });
 
   for (const log of transferLogs) {
-    const { from: fromAddr, to: toAddr, tokenId } = log.args as {
+    const { from: fromAddr, to: toAddr, tokenId } = (log as unknown as { args: {
       from: string; to: string; tokenId: bigint;
-    };
+    } }).args;
     if (fromAddr === "0x0000000000000000000000000000000000000000") continue; // skip mints (handled by TicketSale)
     if (toAddr.toLowerCase() === resaleAddress.toLowerCase()) continue;   // skip escrow transfer on listing
     await prisma.ticket.updateMany({
@@ -119,14 +119,14 @@ async function syncTicketResale(resaleAddress: `0x${string}`) {
   const listedLogs = await publicClient.getLogs({
     address:   resaleAddress,
     event:     TICKET_RESALE_ABI.find((x) => x.type === "event" && x.name === "TicketListed") as never,
-    fromBlock: from + 1n,
+    fromBlock: from + BigInt(1),
     toBlock:   to,
   });
   for (const log of listedLogs) {
-    const { listingId, tokenId } = log.args as { listingId: bigint; seller: string; tokenId: bigint; price: bigint };
+    const { listingId, tokenId } = (log as unknown as { args: { listingId: bigint; seller: string; tokenId: bigint; price: bigint } }).args;
     await prisma.listing.updateMany({
       where: { tokenId: Number(tokenId), onchainListingId: null, status: "ACTIVE" },
-      data:  { onchainListingId: Number(listingId), txHash: log.transactionHash },
+      data:  { onchainListingId: Number(listingId), txHash: (log as unknown as { transactionHash: string }).transactionHash },
     });
   }
 
@@ -134,11 +134,11 @@ async function syncTicketResale(resaleAddress: `0x${string}`) {
   const cancelledLogs = await publicClient.getLogs({
     address:   resaleAddress,
     event:     TICKET_RESALE_ABI.find((x) => x.type === "event" && x.name === "ListingCancelled") as never,
-    fromBlock: from + 1n,
+    fromBlock: from + BigInt(1),
     toBlock:   to,
   });
   for (const log of cancelledLogs) {
-    const { listingId } = log.args as { listingId: bigint };
+    const { listingId } = (log as unknown as { args: { listingId: bigint } }).args;
     const listing = await prisma.listing.findFirst({ where: { onchainListingId: Number(listingId) } });
     if (listing) {
       await prisma.$transaction([
@@ -152,11 +152,11 @@ async function syncTicketResale(resaleAddress: `0x${string}`) {
   const settledLogs = await publicClient.getLogs({
     address:   resaleAddress,
     event:     TICKET_RESALE_ABI.find((x) => x.type === "event" && x.name === "TicketSettled") as never,
-    fromBlock: from + 1n,
+    fromBlock: from + BigInt(1),
     toBlock:   to,
   });
   for (const log of settledLogs) {
-    const { listingId, recipient, tokenId } = log.args as { listingId: bigint; recipient: string; tokenId: bigint };
+    const { listingId, recipient, tokenId } = (log as unknown as { args: { listingId: bigint; recipient: string; tokenId: bigint } }).args;
     const listing = await prisma.listing.findFirst({ where: { onchainListingId: Number(listingId) } });
     if (listing && listing.status !== "SOLD") {
       await prisma.$transaction([
