@@ -162,7 +162,7 @@ export function EventsMapModal({ open, onClose }: { open: boolean; onClose: () =
                         meta={`${e.venue} · ${e.city}`}
                         priceLabel="A partir de"
                         price={`R$ ${e.priceBrl.toFixed(2).replace(".", ",")}`}
-                        cta={soldOut ? "Ver mercado" : "Comprar"}
+                        cta={soldOut ? "Ver revenda" : "Comprar"}
                       />
                     </Popup>
                   </Marker>

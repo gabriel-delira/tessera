@@ -21,6 +21,13 @@ if (process.env.NODE_ENV === "production" && process.env.APP_ENV === "local") {
   console.warn(`\n⚠  ${message} Build local, seguindo.\n`);
 }
 
-const nextConfig: NextConfig = {};
+const nextConfig: NextConfig = {
+  // /market virou /revenda (PLANO_EVOLUCAO_V2.md D1) — link salvo continua
+  // funcionando. A API interna /api/market não muda: é superfície interna,
+  // não a rota pública que motivou o rename.
+  async redirects() {
+    return [{ source: "/market", destination: "/revenda", permanent: true }];
+  },
+};
 
 export default nextConfig;

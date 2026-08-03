@@ -22,6 +22,7 @@ interface MarketListing {
   priceUsdc: number;
   priceBrl: number;
   expiresAt: string | null;
+  createdAt: string;
   isCollectible: boolean;
   attendedEvent: boolean;
   sellerReceivesBrl: number;
@@ -39,8 +40,30 @@ interface MarketListing {
       city: string;
       eventDate: string;
       coverImageUrl: string | null;
+      maxResaleBps: number | null;
     };
   };
+}
+
+interface NegotiationRoundView {
+  roundNumber: number;
+  author: "BUYER" | "SELLER";
+  priceUsdc: number;
+  createdAt: string;
+}
+
+interface NegotiationView {
+  id: string;
+  listingId: string;
+  status: "OPEN" | "ACCEPTED" | "DECLINED" | "EXPIRED" | "SUPERSEDED";
+  agreedPrice: number | null;
+  rounds: NegotiationRoundView[];
+}
+
+interface ListingAnalytics {
+  negotiations: NegotiationView[];
+  checkoutAttempts: number;
+  unsuccessfulCheckouts: number;
 }
 
 interface MyTicket {
@@ -60,6 +83,15 @@ interface CheckoutState {
 
 type MarketTab = "tickets" | "collectibles";
 
+function timeAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const hours = Math.floor(ms / 3_600_000);
+  if (hours < 1) return "há poucos minutos";
+  if (hours < 24) return `há ${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `há ${days} dia${days > 1 ? "s" : ""}`;
+}
+
 export default function MarketPage() {
   const { ready, authenticated, login, getAccessToken, walletAddress } = useAuth();
 
@@ -69,6 +101,7 @@ export default function MarketPage() {
   const [loading, setLoading]     = useState(true);
   const [checkout, setCheckout]   = useState<CheckoutState | null>(null);
   const [details, setDetails]     = useState<MarketListing | null>(null);
+  const [detailsAnalytics, setDetailsAnalytics] = useState<ListingAnalytics | null>(null);
   const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
   const [listModalOpen, setListModalOpen] = useState(false);
   const [proposeTarget, setProposeTarget] = useState<MarketListing | null>(null);
@@ -156,9 +189,30 @@ export default function MarketPage() {
     }
   };
 
+  // Detalhes do anúncio — PLANO_EVOLUCAO_V2.md §4.2. Duas fontes: negociações
+  // (endpoint que já existe, filtrado por esse listingId) e a analytics de
+  // checkout (endpoint novo, camada 2). Carregado só ao abrir, não pra cada
+  // card da lista.
+  const openDetails = async (listing: MarketListing) => {
+    setDetails(listing);
+    setDetailsAnalytics(null);
+    const token = await getAccessToken();
+    const [negRes, listingRes] = await Promise.all([
+      fetch("/api/negotiations", { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`/api/listings/${listing.id}`, { headers: { Authorization: `Bearer ${token}` } }),
+    ]);
+    const negotiations: NegotiationView[] = negRes.ok
+      ? ((await negRes.json()).asSeller ?? []).filter((n: NegotiationView) => n.listingId === listing.id)
+      : [];
+    const { checkoutAttempts, unsuccessfulCheckouts } = listingRes.ok
+      ? await listingRes.json()
+      : { checkoutAttempts: 0, unsuccessfulCheckouts: 0 };
+    setDetailsAnalytics({ negotiations, checkoutAttempts, unsuccessfulCheckouts });
+  };
+
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
-      <PageTitle>Mercado</PageTitle>
+      <PageTitle subtitle="Ingressos e colecionáveis entre pessoas.">Revenda</PageTitle>
 
       <Tabs
         active={tab}
@@ -217,6 +271,12 @@ export default function MarketPage() {
             <p className="text-xs text-text-muted">
               Ingresso #{details.ticket.ticketNumber}{details.ticket.seat ? ` · Assento ${details.ticket.seat}` : ""} · Token #{details.tokenId}
             </p>
+            <p className="text-xs text-text-muted">
+              Anunciado {timeAgo(details.createdAt)}
+              {details.ticket.event.maxResaleBps !== null && (
+                <> · Teto de revenda: {(details.ticket.event.maxResaleBps / 100).toFixed(0)}% do preço original</>
+              )}
+            </p>
             <div className="flex flex-col gap-1.5 rounded-md border border-border bg-surface-2 p-3 text-sm">
               <div className="flex items-center justify-between text-text-muted">
                 <span>Preço anunciado</span>
@@ -235,6 +295,46 @@ export default function MarketPage() {
                 <span className="text-lg font-bold tabular-nums">R$ {details.sellerReceivesBrl.toFixed(2)}</span>
               </div>
             </div>
+
+            {/* Analytics — PLANO_EVOLUCAO_V2.md §4.2. Camada 1 (propostas) e
+                camada 2 (tentativas de checkout), sem tabela nova pra views. */}
+            {!detailsAnalytics ? (
+              <p className="text-xs text-text-muted">Carregando estatísticas…</p>
+            ) : (
+              <div className="flex flex-col gap-3 rounded-md border border-border p-3 text-sm">
+                <div className="flex items-center justify-between text-text-muted">
+                  <span>Tentativas de compra</span>
+                  <span className="tabular-nums text-text">{detailsAnalytics.checkoutAttempts}</span>
+                </div>
+                <div className="flex items-center justify-between text-text-muted">
+                  <span>Sem sucesso (expirou/falhou)</span>
+                  <span className="tabular-nums text-text">{detailsAnalytics.unsuccessfulCheckouts}</span>
+                </div>
+                {detailsAnalytics.negotiations.length > 0 && (
+                  <div className="flex flex-col gap-2 border-t border-border pt-2">
+                    <span className="text-text-muted">Propostas recebidas</span>
+                    {detailsAnalytics.negotiations.map((n) => {
+                      const last = n.rounds[n.rounds.length - 1];
+                      return (
+                        <div key={n.id} className="flex items-center justify-between text-xs">
+                          <span className="text-text-muted">
+                            {last ? `$${last.priceUsdc.toFixed(2)} USDC` : "—"} · {n.rounds.length} rodada{n.rounds.length > 1 ? "s" : ""}
+                          </span>
+                          <Badge
+                            variant={
+                              n.status === "ACCEPTED" ? "success" : n.status === "OPEN" ? "warning" : "neutral"
+                            }
+                          >
+                            {n.status === "OPEN" ? "Em aberto" : n.status === "ACCEPTED" ? "Aceita" : n.status === "DECLINED" ? "Recusada" : n.status === "EXPIRED" ? "Expirada" : "Superada"}
+                          </Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             <Button variant="danger" onClick={() => handleCancel(details)}>Cancelar anúncio</Button>
           </div>
         )}
@@ -265,7 +365,7 @@ export default function MarketPage() {
                 <div className="mt-2 flex items-center gap-2">
                   <span className="font-bold tabular-nums text-text">${l.priceUsdc.toFixed(2)} USDC</span>
                   {isMine ? (
-                    <Button size="sm" variant="secondary" className="ml-auto" onClick={() => setDetails(l)}>Detalhes</Button>
+                    <Button size="sm" variant="secondary" className="ml-auto" onClick={() => openDetails(l)}>Detalhes</Button>
                   ) : (
                     <div className="ml-auto flex gap-2">
                       <Button size="sm" variant="secondary" onClick={() => setProposeTarget(l)}>
@@ -302,7 +402,7 @@ export default function MarketPage() {
                     <span className="font-bold tabular-nums text-text">${l.priceUsdc.toFixed(2)} USDC</span>
                     <span className="text-sm text-text-muted">≈ R$ {l.priceBrl.toFixed(2)}</span>
                     {isMine ? (
-                      <Button size="sm" variant="secondary" className="ml-auto" onClick={() => setDetails(l)}>
+                      <Button size="sm" variant="secondary" className="ml-auto" onClick={() => openDetails(l)}>
                         Detalhes
                       </Button>
                     ) : (

@@ -11,7 +11,7 @@ type Role = "BUYER" | "ORGANIZER" | "ADMIN" | "STAFF";
 
 const NAV_ITEMS: { href: string; label: string; roles?: Role[] }[] = [
   { href: "/", label: "Eventos" },
-  { href: "/market", label: "Mercado" },
+  { href: "/revenda", label: "Revenda" },
   { href: "/my-tickets", label: "Minha Coleção" },
   { href: "/organizer", label: "Organizador", roles: ["ORGANIZER", "ADMIN"] },
   { href: "/admin", label: "Admin", roles: ["ADMIN"] },
@@ -46,7 +46,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, [ready, authenticated, getAccessToken]);
 
-  const visibleItems = NAV_ITEMS.filter((item) => !item.roles || (role && item.roles.includes(role)));
+  // Onda 2 §4.5 — organizador não é comprador (hoje), então "Minha Coleção"
+  // some pra esse papel. Exclusão pontual, não um allowlist de roles: senão
+  // o item some pra visitante anônimo (role null) também, e a página de
+  // Minha Coleção já sabe lidar com "faça login" sozinha.
+  const visibleItems = NAV_ITEMS.filter(
+    (item) =>
+      (!item.roles || (role && item.roles.includes(role))) &&
+      !(item.href === "/my-tickets" && role === "ORGANIZER")
+  );
   const isHome = pathname === "/";
 
   return (
@@ -70,7 +78,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 }`}
               >
                 {item.label}
-                {item.href === "/market" && pendingNegotiations > 0 && (
+                {item.href === "/revenda" && pendingNegotiations > 0 && (
                   <span
                     aria-label={`${pendingNegotiations} negociações pendentes`}
                     className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-laranja-500 px-1 text-[10px] font-bold text-noite-800"
@@ -116,7 +124,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="flex flex-col gap-2">
                 <strong className="font-sans text-text">Produto</strong>
                 <Link href="/" className="text-text-muted hover:text-text">Eventos</Link>
-                <Link href="/market" className="text-text-muted hover:text-text">Mercado</Link>
+                <Link href="/revenda" className="text-text-muted hover:text-text">Revenda</Link>
               </div>
               <div className="flex flex-col gap-2">
                 <strong className="font-sans text-text">Conta</strong>

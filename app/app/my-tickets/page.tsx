@@ -94,7 +94,7 @@ const statusBadge: Record<string, { label: string; variant: "success" | "info" |
   CHECKED_IN: { label: "Utilizado", variant: "info" },
 };
 
-// Mesma regra de elegibilidade do painel de venda em /market — VALID de
+// Mesma regra de elegibilidade do painel de venda em /revenda — VALID de
 // evento futuro, ou VALID/CHECKED_IN de evento já ocorrido (colecionável).
 function isListable(t: TicketWithEvent): boolean {
   const isPast = new Date(t.event.eventDate).getTime() < Date.now();

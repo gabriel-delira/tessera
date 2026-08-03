@@ -109,7 +109,7 @@ async function getFeaturedSlides(): Promise<CarouselSlide[]> {
           `${new Date(e.eventDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "long" })} · ${e.venue} — ${e.city}`,
           e.lineup ?? e.organizer.companyName,
         ],
-        ctaLabel: soldOut ? "Ver no mercado" : "Comprar ingresso",
+        ctaLabel: soldOut ? "Ver na revenda" : "Comprar ingresso",
         priceLabel: "A partir de",
         price: `R$ ${priceBrl.toFixed(2).replace(".", ",")}`,
       };
@@ -281,7 +281,7 @@ export default async function CatalogPage({
                 }
                 priceLabel="A partir de"
                 price={`R$ ${e.priceBrl.toFixed(2).replace(".", ",")}`}
-                cta={soldOut ? "Ver mercado" : "Comprar"}
+                cta={soldOut ? "Ver revenda" : "Comprar"}
               />
             );
           })}

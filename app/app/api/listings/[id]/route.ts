@@ -1,9 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getAuthUser, unauthorized } from "@/lib/auth";
+import { getAuthUser, unauthorized, forbidden } from "@/lib/auth";
 import { publicClient } from "@/lib/chain";
 import { TICKET_RESALE_ABI } from "@/lib/contracts/abis";
 import { parseEventLogs } from "viem";
+
+// GET /api/listings/:id — analytics do anúncio, só pro dono (PLANO_EVOLUCAO_V2.md
+// §4.2, camada 2). Não existe "carrinho" no produto: o análogo de checkout
+// abandonado é Purchase que não chegou a COMPLETED (PENDING expirado, FAILED,
+// REFUNDED) contra esse listingId.
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = await getAuthUser(req);
+  if (!user) return unauthorized();
+
+  const { id } = await params;
+  const listing = await prisma.listing.findUnique({ where: { id } });
+  if (!listing) return NextResponse.json({ error: "Listing not found" }, { status: 404 });
+  if (listing.sellerAddress.toLowerCase() !== user.walletAddress?.toLowerCase()) {
+    return forbidden();
+  }
+
+  const [checkoutAttempts, unsuccessfulCheckouts] = await Promise.all([
+    prisma.purchase.count({ where: { listingId: id } }),
+    prisma.purchase.count({ where: { listingId: id, status: { not: "COMPLETED" } } }),
+  ]);
+
+  return NextResponse.json({ checkoutAttempts, unsuccessfulCheckouts });
+}
 
 // PATCH /api/listings/:id
 // Frontend calls this with the listTicket txHash so we can extract the onchainListingId.
