@@ -140,6 +140,10 @@ model User {
 
   organizer     Organizer?
   purchases     Purchase[]
+  // PLANO_EVOLUCAO_V2.md D18 — compras onde este usuário é quem recebe o
+  // ingresso, não quem pagou. Relação nomeada porque Purchase já tem uma
+  // relação padrão para User via `userId` (quem paga).
+  purchasesReceived Purchase[] @relation("PurchaseRecipient")
   withdrawals   Withdrawal[]
   checkins      Checkin[]
   ledgerEntries LedgerEntry[]
@@ -171,6 +175,8 @@ model Event {
   description          String?
   venue                String
   city                 String
+  country              String      @default("BR") // ISO 3166-1 alpha-2. Base pra hierarquia da cota de meia (lib/socialHalfQuota.ts).
+  state                String?     @map("state") // UF, só quando country = "BR". Sem UF = usa a cota do país.
   latitude             Float?      // geocodificado via Nominatim (OSM) a partir de venue+city na criação/edição do evento
   longitude            Float?
   coverImageUrl        String?     @map("cover_image_url")
@@ -198,6 +204,21 @@ model Event {
   // Basis points sobre Ticket.facePrice, nunca sobre o preço atual do evento.
   maxResaleBps  Int?          @map("max_resale_bps")
 
+  // Reserva do organizador — PLANO_EVOLUCAO_V2.md §5.4/D19. reservedTickets é
+  // a alocação total (não muda sozinha); reservedTicketsAssigned é quanto já
+  // foi nomeado a um beneficiário. A diferença entre os dois é retirada da
+  // disponibilidade pública (ver lib/availability.ts) — só faz sentido
+  // quando maxTickets está definido; em evento sem teto não há o que reduzir.
+  reservedTickets         Int @default(0) @map("reserved_tickets")
+  reservedTicketsAssigned Int @default(0) @map("reserved_tickets_assigned")
+
+  // Meia-entrada — PLANO_EVOLUCAO_V2.md §5.5/D24-D25. hasSocialHalf é o opt-in
+  // do organizador (nem todo evento tem obrigação de meia). A cota em si NÃO é
+  // gravada aqui — é calculada em runtime a partir de country/state via
+  // lib/socialHalfQuota.ts, pra mudança de lei estadual não exigir migração
+  // nem retrofit em eventos já criados.
+  hasSocialHalf Boolean @default(false) @map("has_social_half")
+
   organizer Organizer  @relation(fields: [organizerId], references: [id])
   tickets   Ticket[]
   purchases Purchase[]
@@ -215,6 +236,10 @@ model Ticket {
   status       TicketStatus @default(VALID)
   mintTxHash   String?      @map("mint_tx_hash")
   mintedAt     DateTime?    @map("minted_at")
+
+  // Meia-entrada — PLANO_EVOLUCAO_V2.md D25. Nominal, exige comprovante na
+  // portaria; por isso nunca entra na revenda (checado em POST /api/listings).
+  isHalfPrice  Boolean      @default(false) @map("is_half_price")
 
   event    Event     @relation(fields: [eventId], references: [id])
   listing  Listing?
@@ -262,10 +287,27 @@ model Purchase {
   paidAt        DateTime?      @map("paid_at")
   completedAt   DateTime?      @map("completed_at")
 
-  user    User     @relation(fields: [userId], references: [id])
-  event   Event    @relation(fields: [eventId], references: [id])
-  listing Listing? @relation(fields: [listingId], references: [id])
-  ticket  Ticket?  @relation(fields: [tokenId], references: [tokenId])
+  // Presente — PLANO_EVOLUCAO_V2.md D18. Null = comprou pra si mesmo (o caso
+  // comum); resolução em runtime cai pra userId quando null, então nenhuma
+  // query antiga precisa mudar. Nunca aponta pra alguém sem walletAddress —
+  // isso é validado no checkout, não aqui.
+  recipientUserId String? @map("recipient_user_id")
+
+  // Reserva do organizador — PLANO_EVOLUCAO_V2.md D19. true = esta compra
+  // consumiu uma unidade de Event.reservedTickets (paga só a taxa da
+  // plataforma) em vez de vir da oferta pública.
+  isReservedAllocation Boolean @default(false) @map("is_reserved_allocation")
+
+  // Meia-entrada — PLANO_EVOLUCAO_V2.md D24. true = comprador declarou
+  // meia-entrada no checkout; amountUsdc já sai pela metade do preço do
+  // evento. Copiado pro Ticket.isHalfPrice no mint (webhooks/psp/route.ts).
+  isHalfPrice Boolean @default(false) @map("is_half_price")
+
+  user      User     @relation(fields: [userId], references: [id])
+  recipient User?    @relation("PurchaseRecipient", fields: [recipientUserId], references: [id])
+  event     Event    @relation(fields: [eventId], references: [id])
+  listing   Listing? @relation(fields: [listingId], references: [id])
+  ticket    Ticket?  @relation(fields: [tokenId], references: [tokenId])
   ledgerEntries LedgerEntry[]
 
   @@map("purchases")

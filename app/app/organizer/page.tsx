@@ -9,6 +9,7 @@ import { Badge } from "../components/ui/Badge";
 import { Field } from "../components/ui/Field";
 import { EmptyState } from "../components/ui/EmptyState";
 import { NewEventModal } from "../components/NewEventModal";
+import { AssignReservedModal } from "../components/AssignReservedModal";
 
 interface LedgerRow {
   id: string;
@@ -28,6 +29,8 @@ interface OrganizerEvent {
   status: string;
   ticketPriceUsdc: number;
   maxTickets: number | null;
+  reservedTickets: number;
+  reservedTicketsAssigned: number;
   _count: { tickets: number };
   checkins: number;
   primaryRevenueBrl: number;
@@ -36,9 +39,9 @@ interface OrganizerEvent {
 }
 
 // Evento recém-criado ainda não tem métricas nem contagem de tickets (nasceu
-// agora, sem venda) — o POST devolve só o registro cru do Prisma (sem
-// _count, sem agregados), então preenche tudo com zero em vez de deixar a
-// linha nova quebrar o layout da tabela.
+// agora, sem venda) — o POST devolve o registro cru do Prisma (reservedTickets
+// já vem preenchido dali, mas não _count nem os agregados), então preenche o
+// resto com zero em vez de deixar a linha nova quebrar o layout da tabela.
 function withZeroMetrics(event: Omit<OrganizerEvent, "_count" | "checkins" | "primaryRevenueBrl" | "resaleVolumeBrl" | "royaltiesBrl">): OrganizerEvent {
   return { ...event, _count: { tickets: 0 }, checkins: 0, primaryRevenueBrl: 0, resaleVolumeBrl: 0, royaltiesBrl: 0 };
 }
@@ -61,6 +64,7 @@ export default function OrganizerPage() {
   const [status, setStatus]         = useState<"loading" | "no-org" | "pending" | "ready">("loading");
   const [applyForm, setApplyForm]   = useState<ApplyForm>({ companyName: "", document: "", payoutWallet: "" });
   const [newEventOpen, setNewEventOpen] = useState(false);
+  const [assignTarget, setAssignTarget] = useState<OrganizerEvent | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [ledger, setLedger] = useState<LedgerRow[]>([]);
 
@@ -72,8 +76,7 @@ export default function OrganizerPage() {
     });
   }
 
-  useEffect(() => {
-    if (!ready || !authenticated) return;
+  const loadEvents = () =>
     authFetch("/api/organizer/events").then(async (r) => {
       if (r.status === 403) { setStatus("no-org"); return; }
       const d = await r.json();
@@ -83,6 +86,11 @@ export default function OrganizerPage() {
       const lr = await authFetch("/api/organizer/ledger");
       if (lr.ok) { const ld = await lr.json(); setLedger(ld.entries ?? []); }
     });
+
+  useEffect(() => {
+    if (!ready || !authenticated) return;
+    loadEvents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, authenticated]);
 
   const handleApply = async () => {
@@ -168,7 +176,7 @@ export default function OrganizerPage() {
       ) : (
         <Panel>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] border-collapse text-sm">
+            <table className="w-full min-w-[1000px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-text-muted">
                   <th className="pb-2 pr-4 font-medium">Evento</th>
@@ -179,13 +187,15 @@ export default function OrganizerPage() {
                   <th className="pb-2 pr-4 font-medium">Receita primária</th>
                   <th className="pb-2 pr-4 font-medium">Revenda</th>
                   <th className="pb-2 pr-4 font-medium">Royalties</th>
-                  <th className="pb-2 font-medium">Preço</th>
+                  <th className="pb-2 pr-4 font-medium">Preço</th>
+                  <th className="pb-2 font-medium">Reservados</th>
                 </tr>
               </thead>
               <tbody>
                 {events.map((e) => {
                   const badge = statusBadge[e.status] ?? { label: e.status, variant: "neutral" as const };
                   const sold = e._count.tickets;
+                  const hasReserveLeft = e.reservedTicketsAssigned < e.reservedTickets;
                   return (
                     <tr key={e.id} className="border-b border-border last:border-0">
                       <td className="py-2 pr-4 font-medium text-text">{e.title}</td>
@@ -200,7 +210,21 @@ export default function OrganizerPage() {
                       <td className="py-2 pr-4 text-text">R$ {e.primaryRevenueBrl.toFixed(2).replace(".", ",")}</td>
                       <td className="py-2 pr-4 text-text">R$ {e.resaleVolumeBrl.toFixed(2).replace(".", ",")}</td>
                       <td className="py-2 pr-4 text-text">R$ {e.royaltiesBrl.toFixed(2).replace(".", ",")}</td>
-                      <td className="py-2 text-text">{e.ticketPriceUsdc} USDC</td>
+                      <td className="py-2 pr-4 text-text">{e.ticketPriceUsdc} USDC</td>
+                      <td className="py-2 text-text">
+                        {e.reservedTickets > 0 ? (
+                          <div className="flex items-center gap-2">
+                            <span>{e.reservedTicketsAssigned} / {e.reservedTickets}</span>
+                            {hasReserveLeft && (
+                              <Button size="sm" variant="secondary" onClick={() => setAssignTarget(e)}>
+                                Atribuir
+                              </Button>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-text-muted">—</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -233,6 +257,15 @@ export default function OrganizerPage() {
           </div>
         </Panel>
       )}
+
+      <AssignReservedModal
+        open={!!assignTarget}
+        eventId={assignTarget?.id ?? null}
+        eventTitle={assignTarget?.title ?? ""}
+        authFetch={authFetch}
+        onClose={() => setAssignTarget(null)}
+        onAssigned={() => { setAssignTarget(null); loadEvents(); }}
+      />
     </div>
   );
 }

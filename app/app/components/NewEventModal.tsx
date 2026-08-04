@@ -4,12 +4,15 @@ import { useEffect, useState } from "react";
 import { Modal } from "./ui/Modal";
 import { Field, TextareaField, SelectField } from "./ui/Field";
 import { Button } from "./ui/Button";
+import { getSocialHalfQuotaBps } from "@/lib/socialHalfQuota";
 
 export interface NewEventForm {
   title: string;
   description: string;
   venue: string;
   city: string;
+  country: string;
+  state: string;
   coverImageUrl: string;
   coverVideoUrl: string;
   eventDate: string;
@@ -20,14 +23,24 @@ export interface NewEventForm {
   lineup: string;
   doorsOpenAt: string;
   maxResaleBps: string;
+  reservedTickets: string;
+  hasSocialHalf: boolean;
 }
 
 const EMPTY_FORM: NewEventForm = {
-  title: "", description: "", venue: "", city: "",
+  title: "", description: "", venue: "", city: "", country: "BR", state: "",
   coverImageUrl: "", coverVideoUrl: "",
   eventDate: "", ticketPriceUsdc: "", maxTickets: "",
   category: "OUTRO", subcategory: "", lineup: "", doorsOpenAt: "", maxResaleBps: "",
+  reservedTickets: "", hasSocialHalf: false,
 };
+
+// UF — só usada pra hierarquia da cota de meia (§5.5/D24); "sem UF" cai pra
+// cota do país. Fora do escopo desta fatia expor país (hoje só existe BR).
+const UF_OPTIONS = [
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG",
+  "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
+];
 
 const CATEGORY_OPTIONS = [
   { value: "SHOW", label: "Show" },
@@ -169,6 +182,14 @@ export function NewEventModal({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Título do evento" value={form.title} onChange={(e) => set("title", e.target.value)} />
             <Field label="Cidade" value={form.city} onChange={(e) => set("city", e.target.value)} />
+            <SelectField
+              label="UF (define a cota de meia-entrada do evento)"
+              value={form.state}
+              onChange={(e) => set("state", e.target.value)}
+            >
+              <option value="">Sem UF — usa a cota nacional</option>
+              {UF_OPTIONS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
+            </SelectField>
             <Field
               label="Endereço / local"
               className="sm:col-span-2"
@@ -220,6 +241,24 @@ export function NewEventModal({
             </SelectField>
             {/* Lotes, áreas e ingresso por dia chegam com o modelo TicketType
                 (Onda 3) — hoje o evento tem um preço e uma capacidade só. */}
+            <div className="sm:col-span-2 flex flex-col gap-1.5">
+              <label className="flex items-center gap-2 text-sm text-text">
+                <input
+                  type="checkbox"
+                  checked={form.hasSocialHalf}
+                  onChange={(e) => set("hasSocialHalf", e.target.checked)}
+                  className="h-4 w-4 rounded border-border-strong accent-ouro-500"
+                />
+                Este evento tem meia-entrada
+              </label>
+              {form.hasSocialHalf && (
+                <p className="text-xs text-text-muted">
+                  Cota de {getSocialHalfQuotaBps("BR", form.state || null) / 100}% da capacidade
+                  {form.state ? ` (${form.state})` : " (padrão nacional)"} — ingresso de meia é
+                  nominal e não pode ser revendido.
+                </p>
+              )}
+            </div>
           </div>
         )}
 
@@ -245,6 +284,19 @@ export function NewEventModal({
               label="URL do vídeo de capa (opcional — só no carrossel de destaque)"
               value={form.coverVideoUrl}
               onChange={(e) => set("coverVideoUrl", e.target.value)}
+            />
+            <Field
+              label={
+                form.maxTickets
+                  ? "Qtd. de ingressos reservados (opcional)"
+                  : "Qtd. de ingressos reservados — defina uma quantidade máxima no passo 2 primeiro"
+              }
+              type="number"
+              min="0"
+              disabled={!form.maxTickets}
+              placeholder="Uso próprio, imprensa, cortesias…"
+              value={form.reservedTickets}
+              onChange={(e) => set("reservedTickets", e.target.value)}
             />
             <TextareaField
               label="Descrição (opcional)"

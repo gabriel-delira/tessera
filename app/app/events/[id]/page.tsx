@@ -9,6 +9,7 @@ import { Button } from "../../components/ui/Button";
 import { Badge } from "../../components/ui/Badge";
 import { Icon } from "../../components/ui/Icon";
 import { IdentityModal } from "../../components/IdentityModal";
+import { Field } from "../../components/ui/Field";
 
 interface EventDetail {
   id: string;
@@ -46,6 +47,7 @@ export default function EventDetailPage() {
   const [buying, setBuying]         = useState(false);
   const [error, setError]           = useState<string | null>(null);
   const [needsIdentity, setNeedsIdentity] = useState(false);
+  const [giftRecipient, setGiftRecipient] = useState("");
 
   useEffect(() => {
     fetch(`/api/events/${id}`)
@@ -77,7 +79,7 @@ export default function EventDetailPage() {
       const r = await fetch(`/api/events/${id}/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ method: "PIX" }),
+        body: JSON.stringify({ method: "PIX", giftRecipient: giftRecipient || undefined }),
       });
       const d = await r.json();
       if (!r.ok) {
@@ -164,9 +166,19 @@ export default function EventDetailPage() {
                 {soldOut ? (
                   <Badge variant="error">Esgotado</Badge>
                 ) : (
-                  <Button onClick={handleBuy} disabled={buying || !ready} className="w-full">
-                    {buying ? "Aguarde…" : authenticated ? "Comprar ingresso" : "Entrar e comprar"}
-                  </Button>
+                  <>
+                    {authenticated && (
+                      <Field
+                        label="Presentear alguém? (opcional)"
+                        placeholder="E-mail ou CPF de quem já tem conta"
+                        value={giftRecipient}
+                        onChange={(e) => setGiftRecipient(e.target.value)}
+                      />
+                    )}
+                    <Button onClick={handleBuy} disabled={buying || !ready} className="w-full">
+                      {buying ? "Aguarde…" : authenticated ? (giftRecipient ? "Comprar de presente" : "Comprar ingresso") : "Entrar e comprar"}
+                    </Button>
+                  </>
                 )}
                 {error && <p className="text-xs text-erro-on-dark">{error}</p>}
               </div>

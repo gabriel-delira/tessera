@@ -26,16 +26,19 @@ export async function processPspPayment(chargeId: string): Promise<{ ok: boolean
   const purchase = await prisma.purchase.findUnique({
     where: { pspChargeId: chargeId },
     include: {
-      event:   true,
-      user:    true,
-      listing: true,
+      event:     true,
+      user:      true,
+      recipient: true,
+      listing:   true,
     },
   });
 
   if (!purchase) return { ok: false, message: "Purchase not found after claim" };
 
-  // Buyer wallet (embedded wallet created by Privy)
-  const recipientWallet = purchase.user.walletAddress;
+  // Presente (D18) — o NFT vai pra carteira do destinatário, não de quem
+  // pagou. Sem giftRecipient no checkout, recipientUserId === userId, então
+  // `purchase.recipient` já é o comprador de qualquer forma.
+  const recipientWallet = purchase.recipient?.walletAddress ?? purchase.user.walletAddress;
   if (!recipientWallet) {
     await triggerRefund(purchase.id, purchase.pspChargeId, Number(purchase.amountBrl), purchase.listing?.onchainListingId ?? null);
     return { ok: false, message: "Buyer has no wallet; refunded" };
@@ -184,12 +187,18 @@ export async function processPspPayment(chargeId: string): Promise<{ ok: boolean
           status:       "VALID",
           mintTxHash:   txHash,
           mintedAt:     new Date(),
+          isHalfPrice:  purchase.isHalfPrice,
         },
       }),
       prisma.purchase.update({
         where: { id: purchase.id },
         data:  { status: "COMPLETED", tokenId, mintTxHash: txHash, completedAt: new Date() },
       }),
+      // D19 — consome a cota reservada só agora que o mint confirmou; se o
+      // pagamento falhar antes daqui, a cota nunca foi tocada.
+      ...(purchase.isReservedAllocation
+        ? [prisma.event.update({ where: { id: event.id }, data: { reservedTicketsAssigned: { increment: 1 } } })]
+        : []),
     ]);
 
     return { ok: true, message: `Minted tokenId ${tokenId}` };

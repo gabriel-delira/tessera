@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthUser, unauthorized } from "@/lib/auth";
-import { usdcToBrl, lockRate } from "@/lib/fx";
+import { lockRate } from "@/lib/fx";
 import { psp } from "@/lib/psp";
+import { resolveGiftRecipient } from "@/lib/giftRecipient";
+import { socialHalfCap } from "@/lib/socialHalfQuota";
 import { randomUUID } from "crypto";
 
 export async function POST(
@@ -25,6 +27,17 @@ export async function POST(
 
   const body = await req.json().catch(() => ({}));
   const method: string = body.method ?? "PIX";
+  const giftRecipient: string | undefined = body.giftRecipient || undefined;
+  const useReservedAllocation: boolean = body.useReservedAllocation === true;
+  const isHalfPrice: boolean = body.isHalfPrice === true;
+
+  // Meia-entrada — PLANO_EVOLUCAO_V2.md D24. Só existe se o organizador optou
+  // (hasSocialHalf); nominal e sem upload de comprovante nesta fatia — a
+  // exigência de apresentar o documento na portaria é operação de check-in,
+  // não do checkout.
+  if (isHalfPrice && !event.hasSocialHalf) {
+    return NextResponse.json({ error: "Este evento não tem meia-entrada" }, { status: 409 });
+  }
 
   if (!["PIX", "CARD", "USDC"].includes(method)) {
     return NextResponse.json({ error: "Invalid payment method" }, { status: 400 });
@@ -40,9 +53,39 @@ export async function POST(
     return NextResponse.json({ error: "Identification required", code: "IDENTIFICATION_REQUIRED" }, { status: 403 });
   }
 
+  // Presente — PLANO_EVOLUCAO_V2.md D18. Decisão: destinatário precisa já ter
+  // conta (sem provisionar carteira Privy antecipada). Resolve pra User.id;
+  // se não vier giftRecipient, o ingresso vai pra quem está pagando mesmo.
+  let recipientUserId = user.id;
+  if (giftRecipient) {
+    const resolved = await resolveGiftRecipient(giftRecipient);
+    if ("error" in resolved) {
+      return NextResponse.json({ error: resolved.error, code: resolved.code }, { status: 404 });
+    }
+    recipientUserId = resolved.recipient.id;
+  }
+
+  // Reserva do organizador — PLANO_EVOLUCAO_V2.md D19. Só o próprio
+  // organizador do evento pode consumir a própria cota, e só faz sentido
+  // presenteando alguém (senão não é "reserva", é a compra normal dele).
+  if (useReservedAllocation) {
+    if (!giftRecipient) {
+      return NextResponse.json({ error: "Reserva exige um destinatário (giftRecipient)" }, { status: 400 });
+    }
+    const organizer = await prisma.organizer.findUnique({ where: { id: event.organizerId } });
+    if (!organizer || organizer.userId !== user.id) return unauthorized();
+    if (event.reservedTicketsAssigned >= event.reservedTickets) {
+      return NextResponse.json({ error: "Sem cota reservada disponível para este evento" }, { status: 409 });
+    }
+  }
+
   // Capacity check: minted tickets + in-flight purchases must not exceed maxTickets.
   // The on-chain contract is the final guard, but checking here avoids charging a
   // buyer for a ticket that would revert at mint time. null maxTickets = unlimited.
+  //
+  // Alocação reservada usa só o teto real (maxTickets) — é exatamente pra isso
+  // que a cota foi separada. Compra pública usa o teto menos a reserva ainda
+  // não usada (lib/availability.ts), senão a reserva não protegeria nada.
   if (event.maxTickets !== null) {
     const [sold, inFlight] = await Promise.all([
       prisma.ticket.count({ where: { eventId } }),
@@ -50,12 +93,43 @@ export async function POST(
         where: { eventId, listingId: null, status: { in: ["PENDING", "PAID", "MINTING"] } },
       }),
     ]);
-    if (sold + inFlight >= event.maxTickets) {
+    const hardCap = event.maxTickets;
+    if (sold + inFlight >= hardCap) {
       return NextResponse.json({ error: "Event is sold out" }, { status: 409 });
+    }
+    if (!useReservedAllocation) {
+      const unusedReserve = event.reservedTickets - event.reservedTicketsAssigned;
+      const publicCap = hardCap - unusedReserve;
+      if (sold + inFlight >= publicCap) {
+        return NextResponse.json({ error: "Event is sold out" }, { status: 409 });
+      }
     }
   }
 
-  const priceUsdc = Number(event.ticketPriceUsdc);
+  // Cota de meia — PLANO_EVOLUCAO_V2.md D24. Mesmo par sold+inFlight do check
+  // de capacidade acima, mas contando só unidades de meia — o teto de meia é
+  // uma fração do teto geral, não do que já vendeu no total.
+  if (isHalfPrice) {
+    const cap = socialHalfCap(event);
+    if (cap !== null) {
+      const [soldHalf, inFlightHalf] = await Promise.all([
+        prisma.ticket.count({ where: { eventId, isHalfPrice: true } }),
+        prisma.purchase.count({
+          where: { eventId, listingId: null, isHalfPrice: true, status: { in: ["PENDING", "PAID", "MINTING"] } },
+        }),
+      ]);
+      if (soldHalf + inFlightHalf >= cap) {
+        return NextResponse.json({ error: "Cota de meia-entrada esgotada para este evento" }, { status: 409 });
+      }
+    }
+  }
+
+  // Preço cheio mesmo na alocação reservada — o contrato (buyTicketFor) sempre
+  // paga ao organizador (ticketPrice − taxa) via pendingWithdrawals; cobrar só
+  // a taxa aqui faria a tesouraria adiantar o resto sem nunca reaver. O "só
+  // paga a taxa" da reserva acontece em termos líquidos: o organizador recebe
+  // de volta a própria parte quando sacar o payout do evento.
+  const priceUsdc = isHalfPrice ? Number(event.ticketPriceUsdc) / 2 : Number(event.ticketPriceUsdc);
   const fxRate    = await lockRate();
   const amountBrl = Math.round(priceUsdc * fxRate * 100) / 100;
 
@@ -67,6 +141,7 @@ export async function POST(
     const purchase = await prisma.purchase.create({
       data: {
         userId:        user.id,
+        recipientUserId,
         eventId,
         amountBrl,
         amountUsdc:    priceUsdc,
@@ -75,6 +150,8 @@ export async function POST(
         pspChargeId:   charge.chargeId,
         paymentMethod: method as "PIX" | "CARD",
         status:        "PENDING",
+        isReservedAllocation: useReservedAllocation,
+        isHalfPrice:   isHalfPrice,
       },
     });
 

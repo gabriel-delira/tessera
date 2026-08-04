@@ -85,11 +85,13 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const {
     title, description, venue, city,
+    country, state,
     coverImageUrl, coverVideoUrl, eventDate,
     ticketPriceUsdc, maxTickets,
     royaltyBps, royaltyOrgShareBps,
     category, subcategory, lineup, doorsOpenAt,
-    maxResaleBps,
+    maxResaleBps, reservedTickets,
+    hasSocialHalf,
   } = body;
 
   if (!title || !venue || !city || !eventDate || ticketPriceUsdc === undefined) {
@@ -157,6 +159,29 @@ export async function POST(req: NextRequest) {
     finalMaxResaleBps = bps;
   }
 
+  // Reserva do organizador — PLANO_EVOLUCAO_V2.md D19. Só faz sentido dentro
+  // do teto do evento; sem maxTickets não há oferta pública pra reduzir.
+  let finalReservedTickets = 0;
+  if (reservedTickets !== undefined && reservedTickets !== null && reservedTickets !== "") {
+    const n = Number(reservedTickets);
+    if (!Number.isInteger(n) || n < 0) {
+      return NextResponse.json({ error: "reservedTickets must be a non-negative integer" }, { status: 400 });
+    }
+    if (max !== null && n > max) {
+      return NextResponse.json({ error: "reservedTickets cannot exceed maxTickets" }, { status: 400 });
+    }
+    finalReservedTickets = n;
+  }
+
+  // País/UF — PLANO_EVOLUCAO_V2.md §5.5/D24, base da cota de meia
+  // (lib/socialHalfQuota.ts). País default BR (mercado atual); UF opcional —
+  // sem ela, a cota cai pro país inteiro.
+  const finalCountry = typeof country === "string" && country.trim() ? country.trim().toUpperCase() : "BR";
+  const finalState = typeof state === "string" && state.trim() ? state.trim().toUpperCase() : null;
+  if (finalState !== null && finalState.length !== 2) {
+    return NextResponse.json({ error: "state must be a 2-letter UF code" }, { status: 400 });
+  }
+
   const geo = await geocodeAddress(venue, city);
 
   const event = await prisma.event.create({
@@ -166,6 +191,8 @@ export async function POST(req: NextRequest) {
       description,
       venue,
       city,
+      country:             finalCountry,
+      state:               finalState,
       latitude:            geo?.latitude ?? null,
       longitude:           geo?.longitude ?? null,
       coverImageUrl:      coverImageUrl || null,
@@ -182,6 +209,8 @@ export async function POST(req: NextRequest) {
       lineup:             lineup || null,
       doorsOpenAt:         doorsOpen,
       maxResaleBps:        finalMaxResaleBps,
+      reservedTickets:     finalReservedTickets,
+      hasSocialHalf:       hasSocialHalf === true,
     },
   });
 

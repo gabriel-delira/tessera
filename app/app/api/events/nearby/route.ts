@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { usdcToBrl } from "@/lib/fx";
 import { distanceKm, parseBboxParam } from "@/lib/geo";
+import { publicAvailability } from "@/lib/availability";
 import type { Prisma } from "@prisma/client";
 
 // Dois modos, mutuamente exclusivos:
@@ -67,8 +68,7 @@ export async function GET(req: NextRequest) {
       subcategory: e.subcategory,
       eventDate: e.eventDate,
       priceBrl: await usdcToBrl(Number(e.ticketPriceUsdc)),
-      maxTickets: e.maxTickets,
-      sold: e._count.tickets,
+      available: publicAvailability(e, e._count.tickets),
       distanceKm: Math.round(e.distanceKm * 10) / 10,
     }))
   );

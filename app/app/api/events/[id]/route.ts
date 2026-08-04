@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { usdcToBrl } from "@/lib/fx";
+import { publicAvailability } from "@/lib/availability";
 
 export async function GET(
   _req: NextRequest,
@@ -19,7 +20,7 @@ export async function GET(
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const soldCount    = event.tickets.length;
-  const available    = event.maxTickets ? event.maxTickets - soldCount : null;
+  const available    = publicAvailability(event, soldCount);
   const priceUsdc    = Number(event.ticketPriceUsdc);
   const priceBrl     = await usdcToBrl(priceUsdc);
 

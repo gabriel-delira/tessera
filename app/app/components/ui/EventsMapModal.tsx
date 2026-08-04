@@ -31,8 +31,7 @@ interface NearbyEvent {
   subcategory: string | null;
   eventDate: string;
   priceBrl: number;
-  maxTickets: number | null;
-  sold: number;
+  available: number | null;
   distanceKm: number;
 }
 
@@ -147,7 +146,7 @@ export function EventsMapModal({ open, onClose }: { open: boolean; onClose: () =
             {markerIcon &&
               events.map((e) => {
                 const date = new Date(e.eventDate);
-                const soldOut = e.maxTickets !== null && e.sold >= e.maxTickets;
+                const soldOut = e.available !== null && e.available <= 0;
                 return (
                   <Marker key={e.id} position={[e.latitude, e.longitude]} icon={markerIcon}>
                     <Popup minWidth={256} maxWidth={280}>

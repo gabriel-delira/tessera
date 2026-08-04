@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { usdcToBrl } from "@/lib/fx";
 import { distanceKm } from "@/lib/geo";
+import { publicAvailability } from "@/lib/availability";
 import { PageTitle } from "./components/ui/PageTitle";
 import { EventCard } from "./components/ui/EventCard";
 import { EmptyState } from "./components/ui/EmptyState";
@@ -95,7 +96,8 @@ async function getFeaturedSlides(): Promise<CarouselSlide[]> {
   return Promise.all(
     combined.map(async (e, i) => {
       const priceBrl = await usdcToBrl(Number(e.ticketPriceUsdc));
-      const soldOut = e.maxTickets !== null && e._count.tickets >= e.maxTickets;
+      const available = publicAvailability(e, e._count.tickets);
+      const soldOut = available !== null && available <= 0;
       return {
         href: `/events/${e.id}`,
         grad: GRADIENTS[i % GRADIENTS.length],
@@ -130,8 +132,9 @@ const SORT_ORDER_BY = {
 };
 type SortKey = keyof typeof SORT_ORDER_BY;
 
-function isSoldOut(e: { maxTickets: number | null; sold: number }): boolean {
-  return e.maxTickets !== null && e.sold >= e.maxTickets;
+function isSoldOut(e: { maxTickets: number | null; reservedTickets: number; reservedTicketsAssigned: number; sold: number }): boolean {
+  const available = publicAvailability(e, e.sold);
+  return available !== null && available <= 0;
 }
 
 export default async function CatalogPage({
@@ -254,8 +257,12 @@ export default async function CatalogPage({
           {orderedCards.map((e, i) => {
             const soldOut = isSoldOut(e);
             const date = new Date(e.eventDate);
+            const available = publicAvailability(e, e.sold);
+            const publicCapacity = e.maxTickets !== null ? e.maxTickets - e.reservedTickets : null;
             const availablePct =
-              e.maxTickets ? Math.max(0, 100 - (e.sold / e.maxTickets) * 100) : undefined;
+              publicCapacity !== null && available !== null
+                ? Math.max(0, (available / publicCapacity) * 100)
+                : undefined;
             return (
               <EventCard
                 key={e.id}
@@ -277,7 +284,9 @@ export default async function CatalogPage({
                 meta={`${e.venue} · ${e.city}`}
                 availablePct={availablePct}
                 availableLabel={
-                  e.maxTickets ? `${e.maxTickets - e.sold} de ${e.maxTickets} disponíveis` : `${e.sold} vendidos`
+                  publicCapacity !== null && available !== null
+                    ? `${Math.max(0, available)} de ${publicCapacity} disponíveis`
+                    : `${e.sold} vendidos`
                 }
                 priceLabel="A partir de"
                 price={`R$ ${e.priceBrl.toFixed(2).replace(".", ",")}`}

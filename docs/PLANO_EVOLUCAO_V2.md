@@ -387,7 +387,7 @@ beneficiário e o mint acontece pagando só a taxa da plataforma. O convidado en
 normal, faz check-in normal e **ganha o colecionável** — que é a razão de existir do produto, e
 o que se perderia com um código de acesso sem NFT (D20).
 
-### 5.5 Meia-entrada (D24, D25)
+### 5.5 Meia-entrada (D24, D25) — ✅ implementado
 
 - Cota por UF, não número único. A federal 12.933/2013 cobre estudante, idoso 60+, PcD (+
   acompanhante) e jovem de baixa renda do CadÚnico; **professor não está nela** — é lei estadual
@@ -398,6 +398,32 @@ o que se perderia com um código de acesso sem NFT (D20).
 - Flag `hasSocialHalf` por evento.
 - **Meia não entra na revenda (D25).** É nominal e exige comprovante na portaria; revender como
   inteira quebra a lei. Decidido antes de construir justamente para não virar retrabalho.
+
+**Como foi.** Sem esperar o modelo `TicketType` (A1 segue aberto) — anexado direto em
+`Event`/`Ticket`/`Purchase`, mesmo precedente de D18/D19:
+
+- `Event.country` (`"BR"` default) e `Event.state` (UF, opcional) — campo que não existia no
+  schema; adicionado porque a cota por UF não tem como funcionar sem ele. Preenchido no Step 1
+  do `NewEventModal` (select de UF; sem UF = cota do país).
+- `Event.hasSocialHalf` — opt-in do organizador no Step 2, com a cota calculada exibida ao lado
+  (não editável).
+- `lib/socialHalfQuota.ts` — **resolve A2**: config em arquivo (`STATE_QUOTA_BPS` →
+  `COUNTRY_QUOTA_BPS` → `DEFAULT_QUOTA_BPS = 4000`), não tabela no banco. Hierarquia UF → país →
+  default, exatamente como pedido: se a UF do evento tem regra própria usa ela, senão cai pro
+  país, senão cai pro default de 40%. Hoje nenhuma UF diverge de 40%, mas a tabela já existe
+  pronta pra quando divergir, sem migration.
+- `Purchase.isHalfPrice` / `Ticket.isHalfPrice` — flag que viaja do checkout até o mint
+  (`webhooks/psp/route.ts` copia `purchase.isHalfPrice` pro `Ticket` criado). Preço cobrado é
+  metade de `Event.ticketPriceUsdc`.
+- Cota fechada em `socialHalfCap()` (`floor(maxTickets × bps / 10000)`, arredondado pra baixo) e
+  checada no checkout (`sold + inFlight >= cap` → 409), mesmo padrão de `sold + inFlight` já
+  usado pro teto geral e pra reserva do organizador.
+- `POST /api/listings` rejeita com 409 qualquer `ticket.isHalfPrice === true`, futuro ou
+  colecionável — sem exceção por status.
+- **Fora do escopo desta fatia:** upload/validação de comprovante (CPF de estudante, RG de
+  idoso etc.) — a exigência de apresentar documento é tratada como operação do check-in
+  presencial, não do checkout. Também não há seletor de país na UI (só UF); campo existe no
+  schema para o dia em que o produto sair do Brasil, mas hoje é sempre `"BR"`.
 
 > ⚠️ Nada aqui é parecer jurídico. Validar a modelagem de cota com advogado antes do go-live.
 
@@ -447,7 +473,7 @@ CDC.
 | # | Questão | Bloqueia |
 |---|---|---|
 | A1 | `TicketType` on-chain (5.2a) vs. um evento on-chain por tipo (5.2b) — decidir com custo de gas na mesa. | Início da Onda 3 |
-| A2 | Fonte da configuração de cota de meia por UF: tabela versionada no banco ou arquivo de config no repo? | §5.5 |
+| ~~A2~~ | ~~Fonte da configuração de cota de meia por UF~~ — **fechado em 2026-08-04**: arquivo de config (`lib/socialHalfQuota.ts`), hierarquia UF → país → default. Ver §5.5. | — |
 | A3 | Custódia e conciliação do voucher de consumo — qual PSP, e o que acontece com voucher não usado. | §6.4 |
 | A4 | Formato do modelo 3D (glTF? qual peso máximo?) e onde hospedar. | D14 |
 | A5 | Biblioteca de clustering do mapa, se e quando passar de ~200 pinos. | §3.6 |

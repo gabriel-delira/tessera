@@ -40,6 +40,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Ticket is already listed" }, { status: 409 });
   }
 
+  // PLANO_EVOLUCAO_V2.md D25 — ingresso de meia é nominal e exige comprovante
+  // na portaria; revender como inteira quebra a lei. Sem exceção por evento
+  // futuro/passado: colecionável de meia também não entra na revenda.
+  if (ticket.isHalfPrice) {
+    return NextResponse.json({ error: "Ingresso de meia-entrada não pode ser revendido" }, { status: 409 });
+  }
+
   // LAYOUT_UPDATE.md §5.2 — regra bifurcada por evento futuro/passado. A ordem
   // importa: checar isCollectible primeiro não deve abrir brecha para vender
   // uma entrada que não entra mais (ingresso CHECKED_IN de evento futuro).
