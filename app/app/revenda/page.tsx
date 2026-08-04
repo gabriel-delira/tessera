@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/app/components/AuthProvider";
 import { PageTitle } from "../components/ui/PageTitle";
 import { Panel } from "../components/ui/Panel";
@@ -11,6 +12,7 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { SelectField, Field } from "../components/ui/Field";
 import { Tabs } from "../components/ui/Tabs";
 import { CollectibleCard } from "../components/ui/CollectibleCard";
+import { Icon, type IconName } from "../components/ui/Icon";
 import { NegotiationsPanel } from "../components/NegotiationsPanel";
 import { ListTicketModal } from "../components/ListTicketModal";
 
@@ -28,6 +30,8 @@ interface MarketListing {
   sellerReceivesBrl: number;
   organizerRoyaltyBrl: number;
   platformTotalBrl: number;
+  sellerAchievements: { id: string; icon: string; title: string }[] | null;
+  sellerAchievementsHash: string | null;
   ticket: {
     tokenId: number;
     ticketNumber: number;
@@ -92,10 +96,25 @@ function timeAgo(iso: string): string {
   return `há ${days} dia${days > 1 ? "s" : ""}`;
 }
 
+// useSearchParams (deep link do slot vazio no álbum — §6.2/D15) exige um
+// Suspense boundary pra não bloquear o prerender estático da página inteira.
 export default function MarketPage() {
-  const { ready, authenticated, login, getAccessToken, walletAddress } = useAuth();
+  return (
+    <Suspense fallback={null}>
+      <MarketPageInner />
+    </Suspense>
+  );
+}
 
-  const [tab, setTab]             = useState<MarketTab>("tickets");
+function MarketPageInner() {
+  const { ready, authenticated, login, getAccessToken, walletAddress } = useAuth();
+  const searchParams = useSearchParams();
+
+  // Deep link do álbum (CollectionShelf) pro slot vazio de uma coleção —
+  // PLANO_EVOLUCAO_V2.md §6.2/D15. Só lido na primeira render, igual a um
+  // valor inicial de useState — trocar de aba depois é livre, sem sincronizar
+  // de volta pra URL.
+  const [tab, setTab] = useState<MarketTab>(searchParams.get("tab") === "collectibles" ? "collectibles" : "tickets");
   const [listings, setListings]   = useState<MarketListing[]>([]);
   const [myTickets, setMyTickets] = useState<MyTicket[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -350,18 +369,29 @@ export default function MarketPage() {
         />
       ) : tab === "collectibles" ? (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {listings.map((l, i) => {
+          {listings.map((l) => {
             const isMine = !!myAddress && l.sellerAddress.toLowerCase() === myAddress;
             return (
               <CollectibleCard
                 key={l.id}
-                gradIndex={i}
+                tokenId={l.tokenId}
                 coverImageUrl={l.ticket.event.coverImageUrl}
                 title={l.ticket.event.title}
                 eventDateLabel={new Date(l.ticket.event.eventDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}
                 meta={`${l.ticket.event.venue} · ${l.ticket.event.city} · Ingresso #${l.ticket.ticketNumber}`}
                 attended={l.attendedEvent}
               >
+                {/* Troféus com prova — PLANO_EVOLUCAO_V2.md §6.3/D16. Hash é
+                    recomputável por qualquer um a partir de dados públicos
+                    (checkins do vendedor); não é gravado on-chain nesta fatia. */}
+                {l.sellerAchievements && l.sellerAchievements.length > 0 && (
+                  <div className="flex items-center gap-1.5" title={`Prova: ${l.sellerAchievementsHash}`}>
+                    {l.sellerAchievements.map((a) => (
+                      <Icon key={a.id} name={a.icon as IconName} className="h-4 w-4 text-ouro-400" />
+                    ))}
+                    <span className="text-[11px] text-text-muted">troféus do vendedor · com prova</span>
+                  </div>
+                )}
                 <div className="mt-2 flex items-center gap-2">
                   <span className="font-bold tabular-nums text-text">${l.priceUsdc.toFixed(2)} USDC</span>
                   {isMine ? (

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { createHash } from "crypto";
 
 // LAYOUT_UPDATE.md §8.2 — conquistas calculadas em tempo de leitura a partir
 // de Ticket + Checkin + Event, sem model novo nesta rodada. Retroativas por
@@ -38,7 +39,7 @@ export async function computeAchievements(walletAddress: string): Promise<Achiev
 
   const first = checkins[0];
 
-  return [
+  const achievements: Achievement[] = [
     {
       id: "voce-esteve-la",
       icon: "quadrifolio",
@@ -75,4 +76,23 @@ export async function computeAchievements(walletAddress: string): Promise<Achiev
       achieved: anoCompleto,
     },
   ];
+
+  return achievements;
+}
+
+// Atestado off-chain — PLANO_EVOLUCAO_V2.md §6.3/D16, escopo reduzido:
+// decisão explícita de não escrever hash no contrato nesta fatia (não há
+// campo pra isso em TicketNFTLocked.sol hoje; escrever exigiria função nova
+// + redeploy, e o custo disso não foi avaliado — mesmo racional que manteve
+// A1 em aberto na Onda 3). A "prova" aqui é a verificabilidade: qualquer um
+// pode recomputar computeAchievements(wallet) a partir de Checkin/Ticket
+// (dados já públicos via /api/market) e conferir o hash bate. Inclui a
+// wallet no digest pra duas carteiras com o mesmo conjunto de conquistas
+// não colidirem no mesmo hash.
+export function hashAchievements(achievements: Achievement[], walletAddress: string): string {
+  const achievedIds = achievements.filter((a) => a.achieved).map((a) => a.id).sort();
+  const digest = createHash("sha256")
+    .update(`${walletAddress.toLowerCase()}:${achievedIds.join(",")}`)
+    .digest("hex");
+  return `sha256:${digest}`;
 }

@@ -1,11 +1,11 @@
 import { Badge } from "./Badge";
 
-const gradients = ["var(--grad-energia)", "var(--grad-profundidade)", "var(--grad-legado)"];
-
 // LAYOUT_UPDATE.md §8.1 — peça de prateleira: capa em arco com o filete Ouro
-// do ticket, reaproveitando o gradiente que EventCard/TicketRow já usam.
+// do ticket. PLANO_EVOLUCAO_V2.md §6.1/D13 — sem coverImageUrl (arte custom
+// do organizador), usa a arte gerada em /api/tickets/[tokenId]/art.svg em
+// vez do gradiente liso de antes.
 export function ShelfItem({
-  gradIndex = 0,
+  tokenId,
   coverImageUrl,
   title,
   subtitle,
@@ -13,7 +13,7 @@ export function ShelfItem({
   attended = false,
   onClick,
 }: {
-  gradIndex?: number;
+  tokenId: number;
   coverImageUrl?: string | null;
   title: string;
   subtitle: string;
@@ -21,6 +21,7 @@ export function ShelfItem({
   attended?: boolean;
   onClick?: () => void;
 }) {
+  const art = coverImageUrl ?? `/api/tickets/${tokenId}/art.svg`;
   return (
     <button
       onClick={onClick}
@@ -31,8 +32,7 @@ export function ShelfItem({
         style={{
           height: 110,
           borderRadius: "var(--radius-arch)",
-          background: coverImageUrl ? undefined : gradients[gradIndex % gradients.length],
-          backgroundImage: coverImageUrl ? `url(${coverImageUrl})` : undefined,
+          backgroundImage: `url(${art})`,
           backgroundSize: "cover",
           backgroundPosition: "center",
         }}

@@ -162,10 +162,43 @@ model Organizer {
   kybVerifiedAt DateTime?       @map("kyb_verified_at")  // LAYOUT_UPDATE.md §5.6.1 — exigido antes do 1o evento
   createdAt     DateTime        @default(now()) @map("created_at")
 
-  user   User    @relation(fields: [userId], references: [id])
-  events Event[]
+  user        User         @relation(fields: [userId], references: [id])
+  events      Event[]
+  collections Collection[]
 
   @@map("organizers")
+}
+
+// Álbum de figurinhas — PLANO_EVOLUCAO_V2.md §6.2/D15. Collection é a série
+// (ex.: "Show Retrô — Edições"), definida manualmente pelo organizador; cada
+// Slot é uma edição/ano da série, ligado a um Event já existente. Slot
+// preenchido = usuário tem/teve ingresso pro Event daquele slot; vazio =
+// não foi, e é isso que gera o gancho de demanda de revenda ("cadê minha
+// figurinha de 2024?").
+model Collection {
+  id            String   @id @default(cuid())
+  organizerId   String   @map("organizer_id")
+  title         String
+  description   String?
+  coverImageUrl String?  @map("cover_image_url")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  organizer Organizer @relation(fields: [organizerId], references: [id])
+  slots     Slot[]
+
+  @@map("collections")
+}
+
+model Slot {
+  id           String  @id @default(cuid())
+  collectionId String  @map("collection_id")
+  eventId      String  @unique @map("event_id") // um Event pertence a no máximo uma Collection
+  label        String? // "Edição 2025"; null = usa Event.title
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  event      Event      @relation(fields: [eventId], references: [id])
+
+  @@map("slots")
 }
 
 model Event {
@@ -222,6 +255,7 @@ model Event {
   organizer Organizer  @relation(fields: [organizerId], references: [id])
   tickets   Ticket[]
   purchases Purchase[]
+  slot      Slot?
 
   @@map("events")
 }

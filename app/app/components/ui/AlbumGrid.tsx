@@ -1,5 +1,6 @@
 import { ShelfItem } from "./ShelfItem";
 import { AchievementBadge } from "./AchievementBadge";
+import { CollectionShelf, type CollectionView } from "./CollectionShelf";
 import type { Achievement } from "@/lib/achievements";
 
 export interface AlbumTicket {
@@ -19,10 +20,12 @@ export interface AlbumTicket {
 export function AlbumGrid({
   tickets,
   achievements,
+  collections,
   onSelect,
 }: {
   tickets: AlbumTicket[];
   achievements: Achievement[];
+  collections: CollectionView[];
   onSelect: (tokenId: number) => void;
 }) {
   const now = Date.now();
@@ -39,12 +42,12 @@ export function AlbumGrid({
 
   const grid = (items: AlbumTicket[]) => (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-      {items.map((t, i) => {
+      {items.map((t) => {
         const frozen = !["VALID", "CHECKED_IN"].includes(t.status);
         return (
           <ShelfItem
             key={t.tokenId}
-            gradIndex={i}
+            tokenId={t.tokenId}
             coverImageUrl={t.coverImageUrl}
             title={t.eventTitle}
             subtitle={`${new Date(t.eventDate).toLocaleDateString("pt-BR")} · ${t.city}`}
@@ -67,6 +70,10 @@ export function AlbumGrid({
           </div>
         </div>
       )}
+
+      {collections.map((c) => (
+        <CollectionShelf key={c.id} collection={c} />
+      ))}
 
       {upcoming.length > 0 && (
         <div>

@@ -13,6 +13,7 @@ import { BalanceCard } from "../components/ui/BalanceCard";
 import { Field } from "../components/ui/Field";
 import { ViewToggle } from "../components/ui/ViewToggle";
 import { AlbumGrid } from "../components/ui/AlbumGrid";
+import type { CollectionView } from "../components/ui/CollectionShelf";
 import { ListTicketModal } from "../components/ListTicketModal";
 import type { Achievement } from "@/lib/achievements";
 
@@ -116,6 +117,7 @@ export default function MyTicketsPage() {
   const [statementOpen, setStatementOpen] = useState(false);
   const [view, setView] = useState<"list" | "album">("list");
   const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [collections, setCollections] = useState<CollectionView[]>([]);
   const [listTokenId, setListTokenId] = useState<number | null>(null);
   const [listModalOpen, setListModalOpen] = useState(false);
 
@@ -156,6 +158,9 @@ export default function MyTicketsPage() {
       const token = await getAccessToken();
       const ar = await fetch("/api/me/album", { headers: { Authorization: `Bearer ${token}` } });
       if (ar.ok) { const ad = await ar.json(); setAchievements(ad.achievements ?? []); }
+
+      const cr = await fetch("/api/me/collections", { headers: { Authorization: `Bearer ${token}` } });
+      if (cr.ok) { const cd = await cr.json(); setCollections(cd.collections ?? []); }
     })();
     loadBalance();
   }, [ready, authenticated, getAccessToken, loadBalance, fetchTickets]);
@@ -267,6 +272,7 @@ export default function MyTicketsPage() {
           ) : (
             <AlbumGrid
               achievements={achievements}
+              collections={collections}
               onSelect={(tokenId) => {
                 const t = tickets.find((x) => x.tokenId === tokenId);
                 if (t?.status === "VALID") setSelected(tokenId); // QR só faz sentido para ingresso válido

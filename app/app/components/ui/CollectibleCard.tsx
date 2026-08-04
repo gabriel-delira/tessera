@@ -1,12 +1,10 @@
-import { Icon } from "./Icon";
 import { Badge } from "./Badge";
 
-const gradients = ["var(--grad-energia)", "var(--grad-profundidade)", "var(--grad-legado)"];
-
 // LAYOUT_UPDATE.md §5.4 — colecionável não é ingresso: sem contagem
-// regressiva, disponibilidade ou "expira em".
+// regressiva, disponibilidade ou "expira em". PLANO_EVOLUCAO_V2.md §6.1/D13
+// — sem coverImageUrl, usa a arte gerada em vez do gradiente liso de antes.
 export function CollectibleCard({
-  gradIndex = 0,
+  tokenId,
   coverImageUrl,
   title,
   eventDateLabel,
@@ -14,7 +12,7 @@ export function CollectibleCard({
   attended,
   children,
 }: {
-  gradIndex?: number;
+  tokenId: number;
   coverImageUrl?: string | null;
   title: string;
   eventDateLabel: string;
@@ -22,6 +20,7 @@ export function CollectibleCard({
   attended: boolean;
   children?: React.ReactNode;
 }) {
+  const art = coverImageUrl ?? `/api/tickets/${tokenId}/art.svg`;
   return (
     <div className="flex flex-col overflow-hidden rounded-lg border border-border bg-surface">
       <div
@@ -29,13 +28,11 @@ export function CollectibleCard({
         style={{
           height: 140,
           borderRadius: "var(--radius-arch)",
-          background: coverImageUrl ? undefined : gradients[gradIndex % gradients.length],
-          backgroundImage: coverImageUrl ? `url(${coverImageUrl})` : undefined,
+          backgroundImage: `url(${art})`,
           backgroundSize: "cover",
           backgroundPosition: "center",
         }}
       >
-        {!coverImageUrl && <Icon name="quadrifolio" className="h-14 w-14 text-ouro-300 opacity-55" />}
         <span
           aria-hidden
           className="absolute inset-0"

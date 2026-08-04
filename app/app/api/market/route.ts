@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getBrlPerUsdc } from "@/lib/fx";
 import { computeResaleSplit } from "@/lib/split";
+import { computeAchievements, hashAchievements } from "@/lib/achievements";
 
 // LAYOUT_UPDATE.md §5 — duas abas: "tickets" (eventos futuros) e "collectibles"
 // (eventos já ocorridos). Corte é sempre por event.eventDate < now(), nunca por
@@ -45,6 +46,23 @@ export async function GET(req: NextRequest) {
 
   const fxRate = await getBrlPerUsdc();
 
+  // Troféus com prova — PLANO_EVOLUCAO_V2.md §6.3/D16 (atestado off-chain).
+  // Só pra colecionáveis: é ali que a conquista do vendedor vira parte do
+  // valor do anúncio ("colecionador de verdade", não só "tem o ingresso").
+  const achievementsBySeller = new Map<string, { achieved: { id: string; icon: string; title: string }[]; hash: string }>();
+  if (tab === "collectibles") {
+    const sellers = [...new Set(listings.map((l) => l.sellerAddress))];
+    await Promise.all(
+      sellers.map(async (wallet) => {
+        const achievements = await computeAchievements(wallet);
+        achievementsBySeller.set(wallet, {
+          achieved: achievements.filter((a) => a.achieved).map((a) => ({ id: a.id, icon: a.icon, title: a.title })),
+          hash: hashAchievements(achievements, wallet),
+        });
+      })
+    );
+  }
+
   const result = listings.map((l) => {
     const priceBrl = Math.round(Number(l.price) * fxRate * 100) / 100;
     const { platformFeeBps, royaltyBps, royaltyOrgShareBps, ...event } = l.ticket.event;
@@ -68,6 +86,8 @@ export async function GET(req: NextRequest) {
       sellerReceivesBrl:   split.sellerShare,
       organizerRoyaltyBrl: split.organizerRoyalty,
       platformTotalBrl:    split.platformTotal, // taxa da plataforma + parte dela no royalty
+      sellerAchievements:  achievementsBySeller.get(l.sellerAddress)?.achieved ?? null,
+      sellerAchievementsHash: achievementsBySeller.get(l.sellerAddress)?.hash ?? null,
       ticket: {
         tokenId:      l.ticket.tokenId,
         ticketNumber: l.ticket.ticketNumber,

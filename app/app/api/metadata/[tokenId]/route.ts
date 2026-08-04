@@ -41,7 +41,10 @@ export async function GET(
     ]
       .filter(Boolean)
       .join(" "),
-    image: event.coverImageUrl ?? `${appUrl}/placeholder-ticket.png`,
+    // Arte custom do organizador (coverImageUrl) prevalece; sem ela, gera a
+    // arte no servidor — PLANO_EVOLUCAO_V2.md §6.1/D13. Substitui o
+    // placeholder estático de antes.
+    image: event.coverImageUrl ?? `${appUrl}/api/tickets/${tokenId}/art.svg`,
     external_url: `${appUrl}/events/${event.id}`,
     attributes: [
       { trait_type: "Evento",            value: event.title },

@@ -431,7 +431,7 @@ o que se perderia com um código de acesso sem NFT (D20).
 
 ## 6. Onda 4 — colecionável
 
-### 6.1 Arte da NFT gerada (D13)
+### 6.1 Arte da NFT gerada (D13) — ✅ implementado
 
 SVG server-side em `/api/metadata/[tokenId]`, montado com os dados do ingresso (evento, número,
 data, selo "Você esteve lá"). Determinístico, sem storage, e o organizador pode subir arte
@@ -441,7 +441,14 @@ Resolve de quebra as "imagens que parecem não renderizar" no álbum: **não é 
 3 dos 4 eventos passados do seed não têm `coverImageUrl` e caem no gradiente de fallback, e os
 que têm apontam para `picsum.photos`, que exige rede.
 
-### 6.2 Álbum de figurinhas com slot vazio (D15)
+**Como foi.** `lib/ticketArt.ts` gera o SVG (gradiente de marca por `tokenId % 3`, título,
+data, número do ingresso, selo "Você esteve lá" quando há check-in). Servido publicamente em
+`GET /api/tickets/[tokenId]/art.svg` (`Content-Type: image/svg+xml`), reaproveitado em dois
+lugares: `image` do metadata do NFT (`coverImageUrl ?? art.svg`) e `background-image` de
+`ShelfItem`/`CollectibleCard` no lugar do gradiente liso de antes — o álbum agora sempre mostra
+arte de verdade, nunca um retângulo sem conteúdo.
+
+### 6.2 Álbum de figurinhas com slot vazio (D15) — ✅ implementado
 
 A melhor ideia da rodada, e a que nenhum concorrente tem: a figurinha *faltante* do ano em que a
 pessoa não foi é um motor de demanda de colecionável.
@@ -450,13 +457,36 @@ Modelo: `Collection` (série do evento, por edição/ano) → `Slot` (conquista,
 vazia), definidos pelo organizador. Slot vazio é renderizado como silhueta, com link para a
 Revenda quando existir anúncio daquela edição.
 
-### 6.3 Conquistas atestadas (D16)
+**Como foi.** `Collection`/`Slot` novos no schema (`Slot.eventId` é `@unique` — um Event
+pertence a no máximo uma Collection). **Decisão fechada em 2026-08-04**: sem auto-detecção por
+título/categoria — o organizador cria a Collection e anexa Events dele manualmente
+(`CollectionsManager.tsx`, seção nova em `/organizer`; API `/api/organizer/collections` +
+`/api/organizer/collections/[id]/slots`). Do lado do usuário, `GET /api/me/collections` só
+devolve coleções onde ele já preenche pelo menos um slot (não expõe séries de terceiros);
+`CollectionShelf.tsx` (integrado ao `AlbumGrid` da view "álbum" de Minha Coleção) renderiza os
+slots preenchidos com a arte do ingresso e os vazios como silhueta pontilhada, com link "Ver na
+Revenda" quando existe listing ativo pra aquele evento (`/revenda?tab=collectibles`, lido via
+`useSearchParams` no state inicial da aba).
+
+### 6.3 Conquistas atestadas (D16) — ✅ implementado (off-chain)
 
 Metadata dinâmica off-chain + hash de atestado on-chain. Escrever cada conquista na chain é caro
 e irreversível; o hash dá verificabilidade pelo mesmo preço de uma escrita. Na revenda, o
 anúncio exibe os troféus **com prova**.
 
-### 6.4 Voucher de consumo (D4)
+**Como foi — escopo reduzido, decisão fechada em 2026-08-04**: só a parte off-chain. Hoje não
+existe nenhum campo de hash em `TicketNFTLocked.sol` — gravar on-chain exigiria função +
+storage novos e redeploy do contrato, e (mesmo racional de A1 na Onda 3) esse custo não foi
+avaliado ainda, então não escrevemos nada on-chain nesta fatia. Em vez disso,
+`hashAchievements()` (`lib/achievements.ts`) computa um digest sha256 determinístico sobre as
+conquistas alcançadas + wallet; qualquer um pode recomputar `computeAchievements(wallet)` a
+partir de dados já públicos (`Checkin`/`Ticket`) e conferir que o hash bate — é uma prova
+verificável, só que sem escrita em chain. Exposto em `GET /api/me/album` (`achievementsHash`) e,
+pra colecionáveis, em `GET /api/market` (`sellerAchievements` + `sellerAchievementsHash` por
+listing) — a Revenda mostra os troféus do vendedor com o hash no tooltip. Se decidirmos migrar
+pra on-chain depois, o hash já calculado aqui é exatamente o que iria pro contrato.
+
+### 6.4 Voucher de consumo (D4) — ⏸️ adiado deliberadamente
 
 `EventExtra` (item vendido pelo organizador) + voucher amarrado ao ingresso NFT, queimado pelo
 mesmo QR rotativo do check-in — o QR já existe; o que falta é o POS do operador.
@@ -465,6 +495,13 @@ mesmo QR rotativo do check-in — o QR já existe; o que falta é o POS do opera
 produto, saldo é moeda. Além disso o dinheiro fica em custódia até o evento (você vira
 depositário), a nota fiscal do alimento é do organizador, e crédito não-reembolsável esbarra no
 CDC.
+
+**Decisão do produto, fechada em 2026-08-04: não construir agora.** Não é falta de tempo — é
+que ainda não validamos que o mercado (organizador + público) quer essa funcionalidade, e nessa
+forma específica (voucher de item, não crédito). Construir antes de validar arrisca meses de
+trabalho — POS do operador, conciliação com PSP, nota fiscal do organizador — em cima de uma
+hipótese não testada. Quando houver essa validação, o desenho acima (voucher de item, QR
+reaproveitado) segue sendo o ponto de partida; nada aqui foi descartado, só adiado.
 
 ---
 

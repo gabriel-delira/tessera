@@ -10,6 +10,7 @@ import { Field } from "../components/ui/Field";
 import { EmptyState } from "../components/ui/EmptyState";
 import { NewEventModal } from "../components/NewEventModal";
 import { AssignReservedModal } from "../components/AssignReservedModal";
+import { CollectionsManager } from "../components/CollectionsManager";
 
 interface LedgerRow {
   id: string;
@@ -256,6 +257,13 @@ export default function OrganizerPage() {
             ))}
           </div>
         </Panel>
+      )}
+
+      {events.length > 0 && (
+        <CollectionsManager
+          organizerEvents={events.map((e) => ({ id: e.id, title: e.title, eventDate: e.eventDate }))}
+          authFetch={authFetch}
+        />
       )}
 
       <AssignReservedModal
