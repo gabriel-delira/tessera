@@ -211,17 +211,6 @@ export async function POST(req: NextRequest) {
       maxResaleBps:        finalMaxResaleBps,
       reservedTickets:     finalReservedTickets,
       hasSocialHalf:       hasSocialHalf === true,
-      // PLANO_EVOLUCAO_V2.md §5.1/§5.2 — todo evento nasce com um TicketType
-      // único, espelhando o preço/cota que o Step 2 do NewEventModal ainda
-      // coleta como campo simples. É esta linha que a aprovação envia como a
-      // matriz (de um elemento) para createEvent on-chain.
-      ticketTypes: {
-        create: {
-          label:     "Inteira",
-          priceUsdc: price,
-          quantity:  max,
-        },
-      },
     },
   });
 

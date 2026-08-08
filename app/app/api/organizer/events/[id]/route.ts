@@ -42,20 +42,5 @@ export async function PATCH(
   }
 
   const updated = await prisma.event.update({ where: { id }, data });
-
-  // PLANO_EVOLUCAO_V2.md §5.1 — nesta fatia todo evento tem um único TicketType,
-  // espelho de ticketPriceUsdc/maxTickets. Editar o evento antes da aprovação
-  // sem sincronizar o tipo deixaria a matriz enviada on-chain (createEventOnChain)
-  // desatualizada em relação ao que o organizador acabou de mudar na tela.
-  if ("ticketPriceUsdc" in data || "maxTickets" in data) {
-    await prisma.ticketType.updateMany({
-      where: { eventId: id },
-      data: {
-        ...("ticketPriceUsdc" in data ? { priceUsdc: data.ticketPriceUsdc as number } : {}),
-        ...("maxTickets" in data ? { quantity: data.maxTickets as number | null } : {}),
-      },
-    });
-  }
-
   return NextResponse.json({ event: updated });
 }

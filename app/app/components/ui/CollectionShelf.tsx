@@ -1,5 +1,5 @@
-import { ShelfItem } from "./ShelfItem";
-import { SlotPlaceholder } from "./SlotPlaceholder";
+import Link from "next/link";
+import { Icon } from "./Icon";
 
 export interface CollectionSlotView {
   slotId: string;
@@ -19,15 +19,10 @@ export interface CollectionView {
   slots: CollectionSlotView[];
 }
 
-// Prateleira de coleção — mostrada como seção própria antes da listagem de
-// ingressos (fora do álbum paginado), não mais como uma página dele.
-export function CollectionShelf({
-  collection,
-  onSelect,
-}: {
-  collection: CollectionView;
-  onSelect: (tokenId: number) => void;
-}) {
+// Álbum de figurinhas — PLANO_EVOLUCAO_V2.md §6.2/D15. A figurinha faltante
+// (slot vazio) é o motor de demanda: mostra a silhueta e, se existir anúncio
+// da mesma edição na Revenda, o link pra comprar.
+export function CollectionShelf({ collection }: { collection: CollectionView }) {
   const filledCount = collection.slots.filter((s) => s.filled).length;
 
   return (
@@ -37,28 +32,43 @@ export function CollectionShelf({
         <span className="text-xs text-text-muted">{filledCount} de {collection.slots.length}</span>
       </div>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        {collection.slots.map((s, i) =>
-          s.filled && s.tokenId !== null ? (
-            <ShelfItem
+        {collection.slots.map((s) => {
+          const art = s.coverImageUrl ?? (s.tokenId !== null ? `/api/tickets/${s.tokenId}/art.svg` : null);
+          return (
+            <div
               key={s.slotId}
-              tokenId={s.tokenId}
-              coverImageUrl={s.coverImageUrl}
-              title={s.label}
-              subtitle={`${new Date(s.eventDate).toLocaleDateString("pt-BR")} · ${s.city}`}
-              onClick={() => onSelect(s.tokenId!)}
-            />
-          ) : (
-            <SlotPlaceholder
-              key={s.slotId}
-              index={i}
-              label={s.label}
-              eventDate={s.eventDate}
-              city={s.city}
-              eventId={s.eventId}
-              listingId={s.listingId}
-            />
-          )
-        )}
+              className={`flex flex-col overflow-hidden rounded-lg border text-left ${
+                s.filled ? "border-border bg-surface" : "border-dashed border-border-strong bg-surface/40"
+              }`}
+            >
+              <div
+                className="relative flex items-center justify-center"
+                style={{
+                  height: 110,
+                  borderRadius: "var(--radius-arch)",
+                  backgroundImage: art ? `url(${art})` : undefined,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                }}
+              >
+                {!s.filled && <Icon name="quadrifolio" className="h-10 w-10 text-text-muted opacity-40" />}
+              </div>
+              <div className="px-3 py-2.5">
+                <p className={`truncate font-display text-sm ${s.filled ? "text-text" : "text-text-muted"}`}>
+                  {s.label}
+                </p>
+                <p className="truncate text-xs text-text-muted">
+                  {new Date(s.eventDate).toLocaleDateString("pt-BR")} · {s.city}
+                </p>
+                {!s.filled && s.listingId && (
+                  <Link href="/revenda?tab=collectibles" className="mt-1 block text-xs text-violeta-300 underline">
+                    Ver na Revenda
+                  </Link>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

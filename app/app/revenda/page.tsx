@@ -115,10 +115,6 @@ function MarketPageInner() {
   // valor inicial de useState — trocar de aba depois é livre, sem sincronizar
   // de volta pra URL.
   const [tab, setTab] = useState<MarketTab>(searchParams.get("tab") === "collectibles" ? "collectibles" : "tickets");
-  // Deep link do card "Ver revenda" de um evento esgotado — §9.2/D29. Só lido
-  // na primeira render, igual ao `tab` acima; o chip permite limpar o filtro
-  // sem sincronizar de volta pra URL.
-  const [eventFilter, setEventFilter] = useState<{ id: string; title: string } | null>(null);
   const [listings, setListings]   = useState<MarketListing[]>([]);
   const [myTickets, setMyTickets] = useState<MyTicket[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -134,24 +130,13 @@ function MarketPageInner() {
 
   const myAddress = walletAddress;
 
-  const fetchListings = useCallback(async (t: MarketTab, eventId?: string) => {
+  const fetchListings = useCallback(async (t: MarketTab) => {
     setLoading(true);
-    const qs = eventId ? `tab=${t}&event=${eventId}` : `tab=${t}`;
-    const r = await fetch(`/api/market?${qs}`);
+    const r = await fetch(`/api/market?tab=${t}`);
     const data = await r.json();
     setListings(Array.isArray(data) ? data : []);
     setLoading(false);
   }, []);
-
-  // Carrega o título do evento filtrado (deep link §9.2/D29) uma vez, pro chip.
-  useEffect(() => {
-    const eventId = searchParams.get("event");
-    if (!eventId) return;
-    fetch(`/api/events/${eventId}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d?.title) setEventFilter({ id: eventId, title: d.title }); })
-      .catch(() => {});
-  }, [searchParams]);
 
   const fetchMyTickets = useCallback(async () => {
     if (!authenticated) return;
@@ -163,14 +148,9 @@ function MarketPageInner() {
 
   useEffect(() => {
     if (!ready) return;
-    fetchListings(tab, eventFilter?.id);
-    if (authenticated) fetchMyTickets();
-  }, [ready, authenticated, tab, eventFilter, fetchListings, fetchMyTickets]);
-
-  const clearEventFilter = () => {
-    setEventFilter(null);
     fetchListings(tab);
-  };
+    if (authenticated) fetchMyTickets();
+  }, [ready, authenticated, tab, fetchListings, fetchMyTickets]);
 
   // Ingressos elegíveis para anúncio na aba corrente — §5: VALID de evento
   // futuro na aba "tickets"; VALID ou CHECKED_IN de evento passado em "collectibles".
@@ -252,23 +232,6 @@ function MarketPageInner() {
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
       <PageTitle subtitle="Ingressos e colecionáveis entre pessoas.">Revenda</PageTitle>
-
-      {eventFilter && (
-        <div className="mb-4 flex items-center gap-2 text-sm">
-          <span className="text-text-muted">Filtrando:</span>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-border-strong bg-surface-2 px-3 py-1 text-text">
-            {eventFilter.title}
-            <button
-              type="button"
-              onClick={clearEventFilter}
-              aria-label="Limpar filtro de evento"
-              className="text-text-muted hover:text-text"
-            >
-              ✕
-            </button>
-          </span>
-        </div>
-      )}
 
       <Tabs
         active={tab}
@@ -402,13 +365,7 @@ function MarketPageInner() {
       ) : listings.length === 0 ? (
         <EmptyState
           icon="ticket"
-          title={
-            eventFilter
-              ? `Ninguém está revendendo ingresso para ${eventFilter.title} ainda.`
-              : tab === "collectibles"
-              ? "Nenhum colecionável à venda no momento."
-              : "Nenhum ingresso à venda no momento."
-          }
+          title={tab === "collectibles" ? "Nenhum colecionável à venda no momento." : "Nenhum ingresso à venda no momento."}
         />
       ) : tab === "collectibles" ? (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -421,38 +378,26 @@ function MarketPageInner() {
                 coverImageUrl={l.ticket.event.coverImageUrl}
                 title={l.ticket.event.title}
                 eventDateLabel={new Date(l.ticket.event.eventDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}
-                meta={`${l.ticket.event.venue} · ${l.ticket.event.city}`}
+                meta={`${l.ticket.event.venue} · ${l.ticket.event.city} · Ingresso #${l.ticket.ticketNumber}`}
                 attended={l.attendedEvent}
               >
-                {/* §9.3/D30 — meta some pra 2 linhas fixas (local / nº do
-                    ingresso) em vez de uma string só, senão card vizinho
-                    quebra em alturas diferentes. */}
-                <p className="-mt-1 text-xs text-text-muted">Ingresso #{l.ticket.ticketNumber}</p>
-
                 {/* Troféus com prova — PLANO_EVOLUCAO_V2.md §6.3/D16. Hash é
                     recomputável por qualquer um a partir de dados públicos
                     (checkins do vendedor); não é gravado on-chain nesta fatia. */}
                 {l.sellerAchievements && l.sellerAchievements.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5" title={`Prova: ${l.sellerAchievementsHash}`}>
+                  <div className="flex items-center gap-1.5" title={`Prova: ${l.sellerAchievementsHash}`}>
                     {l.sellerAchievements.map((a) => (
-                      <Icon key={a.id} name={a.icon as IconName} className="h-4 w-4 shrink-0 text-ouro-400" />
+                      <Icon key={a.id} name={a.icon as IconName} className="h-4 w-4 text-ouro-400" />
                     ))}
                     <span className="text-[11px] text-text-muted">troféus do vendedor · com prova</span>
                   </div>
                 )}
-
-                {/* §9.3/D30 — preço e ações em duas linhas: o rodapé de uma
-                    linha só (preço + Propor + Comprar) não cabe na coluna do
-                    grid de 3 e era cortado pelo overflow-hidden do card. */}
-                <div className="mt-2 flex min-w-0 flex-col gap-2">
-                  <div className="leading-tight">
-                    <span className="block truncate font-bold tabular-nums text-text">${l.priceUsdc.toFixed(2)} USDC</span>
-                    <span className="text-xs text-text-muted">≈ R$ {l.priceBrl.toFixed(2)}</span>
-                  </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="font-bold tabular-nums text-text">${l.priceUsdc.toFixed(2)} USDC</span>
                   {isMine ? (
-                    <Button size="sm" variant="secondary" onClick={() => openDetails(l)}>Detalhes</Button>
+                    <Button size="sm" variant="secondary" className="ml-auto" onClick={() => openDetails(l)}>Detalhes</Button>
                   ) : (
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="ml-auto flex gap-2">
                       <Button size="sm" variant="secondary" onClick={() => setProposeTarget(l)}>
                         Propor
                       </Button>

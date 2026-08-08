@@ -26,11 +26,10 @@ export async function processPspPayment(chargeId: string): Promise<{ ok: boolean
   const purchase = await prisma.purchase.findUnique({
     where: { pspChargeId: chargeId },
     include: {
-      event:      true,
-      ticketType: true,
-      user:       true,
-      recipient:  true,
-      listing:    true,
+      event:     true,
+      user:      true,
+      recipient: true,
+      listing:   true,
     },
   });
 
@@ -160,15 +159,6 @@ export async function processPspPayment(chargeId: string): Promise<{ ok: boolean
     await triggerRefund(purchase.id, purchase.pspChargeId, Number(purchase.amountBrl), null);
     return { ok: false, message: "Event not deployed on-chain; refunded" };
   }
-  const ticketType = purchase.ticketType;
-  if (!ticketType || ticketType.onchainTypeId === null) {
-    // Não deveria acontecer: o checkout (§5.1) só cria a Purchase depois de
-    // confirmar que o TicketType tem onchainTypeId. Se chegou aqui mesmo assim,
-    // é mais seguro reembolsar do que adivinhar um typeId.
-    await triggerRefund(purchase.id, purchase.pspChargeId, Number(purchase.amountBrl), null);
-    return { ok: false, message: "Ticket type not deployed on-chain; refunded" };
-  }
-  const onchainTypeId = ticketType.onchainTypeId;
 
   // Mark MINTING
   await prisma.purchase.update({
@@ -179,7 +169,6 @@ export async function processPspPayment(chargeId: string): Promise<{ ok: boolean
   try {
     const { txHash, tokenId } = await buyTicketOnChain(
       event.onchainEventId,
-      onchainTypeId,
       recipientWallet as `0x${string}`
     );
 
@@ -192,7 +181,6 @@ export async function processPspPayment(chargeId: string): Promise<{ ok: boolean
         data: {
           tokenId,
           eventId:      event.id,
-          ticketTypeId: ticketType.id,
           ownerAddress: recipientWallet,
           ticketNumber,
           facePrice:    purchase.amountUsdc,

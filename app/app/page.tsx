@@ -112,9 +112,6 @@ async function getFeaturedSlides(): Promise<CarouselSlide[]> {
           e.lineup ?? e.organizer.companyName,
         ],
         ctaLabel: soldOut ? "Ver na revenda" : "Comprar ingresso",
-        // D29 (§9.2) — o rótulo já dizia "Ver na revenda", mas o slide
-        // inteiro só linkava para o evento; agora o CTA tem destino próprio.
-        ctaHref: soldOut ? `/revenda?tab=tickets&event=${e.id}` : undefined,
         priceLabel: "A partir de",
         price: `R$ ${priceBrl.toFixed(2).replace(".", ",")}`,
       };
@@ -294,7 +291,6 @@ export default async function CatalogPage({
                 priceLabel="A partir de"
                 price={`R$ ${e.priceBrl.toFixed(2).replace(".", ",")}`}
                 cta={soldOut ? "Ver revenda" : "Comprar"}
-                ctaHref={soldOut ? `/revenda?tab=tickets&event=${e.id}` : undefined}
               />
             );
           })}

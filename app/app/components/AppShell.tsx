@@ -9,10 +9,10 @@ import { Logo } from "./Logo";
 
 type Role = "BUYER" | "ORGANIZER" | "ADMIN" | "STAFF";
 
-const NAV_ITEMS: { href: string; label: string; roles?: Role[]; requiresAuth?: boolean }[] = [
+const NAV_ITEMS: { href: string; label: string; roles?: Role[] }[] = [
   { href: "/", label: "Eventos" },
   { href: "/revenda", label: "Revenda" },
-  { href: "/my-tickets", label: "Minha Coleção", requiresAuth: true },
+  { href: "/my-tickets", label: "Minha Coleção" },
   { href: "/organizer", label: "Organizador", roles: ["ORGANIZER", "ADMIN"] },
   { href: "/admin", label: "Admin", roles: ["ADMIN"] },
   { href: "/checkin", label: "Check-in", roles: ["STAFF", "ADMIN"] },
@@ -46,15 +46,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, [ready, authenticated, getAccessToken]);
 
-  // D28 (PLANO_EVOLUCAO_V2.md §9.1) — itens de conta só aparecem logado.
-  // signedIn já exige `ready`, então o item nasce escondido em vez de
-  // piscar (aparecer é menos violento que sumir debaixo do cursor).
   // Onda 2 §4.5 — organizador não é comprador (hoje), então "Minha Coleção"
-  // some pra esse papel também. Exclusão pontual, não um allowlist de roles.
-  const signedIn = ready && authenticated;
+  // some pra esse papel. Exclusão pontual, não um allowlist de roles: senão
+  // o item some pra visitante anônimo (role null) também, e a página de
+  // Minha Coleção já sabe lidar com "faça login" sozinha.
   const visibleItems = NAV_ITEMS.filter(
     (item) =>
-      (!item.requiresAuth || signedIn) &&
       (!item.roles || (role && item.roles.includes(role))) &&
       !(item.href === "/my-tickets" && role === "ORGANIZER")
   );
@@ -131,9 +128,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
               <div className="flex flex-col gap-2">
                 <strong className="font-sans text-text">Conta</strong>
-                {signedIn && role !== "ORGANIZER" && (
-                  <Link href="/my-tickets" className="text-text-muted hover:text-text">Minha Coleção</Link>
-                )}
+                <Link href="/my-tickets" className="text-text-muted hover:text-text">Minha Coleção</Link>
                 <Link href="/organizer" className="text-text-muted hover:text-text">Organizador</Link>
               </div>
             </div>

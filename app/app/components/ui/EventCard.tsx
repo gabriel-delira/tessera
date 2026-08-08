@@ -30,7 +30,6 @@ export function EventCard({
   priceLabel,
   price,
   cta,
-  ctaHref,
   compact = false,
 }: {
   href: string;
@@ -48,33 +47,28 @@ export function EventCard({
   priceLabel?: string;
   price: string;
   cta: string;
-  /** PLANO_EVOLUCAO_V2.md §9.2/D29 — quando presente, o CTA é seu próprio
-   * link (ex.: evento esgotado → Revenda) em vez de herdar o destino do
-   * card. Evita link aninhado: o CTA sai do `<Link>` externo e o card
-   * inteiro passa a usar stretched-link. */
-  ctaHref?: string;
   compact?: boolean;
 }) {
   return (
-    <div
+    <Link
+      href={href}
       className={`group relative flex flex-col overflow-hidden rounded-lg border border-border bg-surface transition-[transform,box-shadow,border-color] hover:-translate-y-0.5 hover:border-ouro-500/40 hover:shadow-lg ${
         compact ? "w-64" : ""
       }`}
     >
-      <Link href={href} aria-label={title} className="absolute inset-0 z-0" />
-      <span className="pointer-events-none absolute left-3 top-3 z-10 flex flex-col items-center rounded-md bg-noite-900/82 px-2.5 py-1.5 text-center leading-none text-text">
+      <span className="absolute left-3 top-3 z-10 flex flex-col items-center rounded-md bg-noite-900/82 px-2.5 py-1.5 text-center leading-none text-text">
         <b className="text-base">{day}</b>
         <span className="text-[10px] uppercase tracking-[0.1em] text-ouro-400">{month}</span>
       </span>
       {badge && (
-        <span className="pointer-events-none absolute right-3 top-3 z-10">
+        <span className="absolute right-3 top-3 z-10">
           <Badge variant={badge.variant} float>
             {badge.label}
           </Badge>
         </span>
       )}
       <div
-        className="pointer-events-none relative flex items-center justify-center overflow-hidden bg-cover bg-center"
+        className="relative flex items-center justify-center overflow-hidden bg-cover bg-center"
         style={{
           height: compact ? 100 : 168,
           borderRadius: "var(--radius-arch)",
@@ -116,20 +110,11 @@ export function EventCard({
             {priceLabel && <small className="block text-[11px] text-text-muted">{priceLabel}</small>}
             <span className="font-sans text-lg font-bold tabular-nums text-text">{price}</span>
           </div>
-          {ctaHref ? (
-            <Link
-              href={ctaHref}
-              className="relative z-10 inline-flex h-9 items-center justify-center rounded-md border border-border-strong px-4 text-sm font-semibold text-text hover:border-ouro-500"
-            >
-              {cta}
-            </Link>
-          ) : (
-            <span className="pointer-events-none inline-flex h-9 items-center justify-center rounded-md border border-border-strong px-4 text-sm font-semibold text-text group-hover:border-ouro-500">
-              {cta}
-            </span>
-          )}
+          <span className="inline-flex h-9 items-center justify-center rounded-md border border-border-strong px-4 text-sm font-semibold text-text group-hover:border-ouro-500">
+            {cta}
+          </span>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }

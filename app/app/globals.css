@@ -99,25 +99,6 @@ body {
   border-radius: inherit;
 }
 
-/* Virada de página do álbum — PLANO_EVOLUCAO_V2.md §9.4.3/D34.
-   O eixo é o vinco (centro da folha), não a borda externa: só a metade que
-   está sendo virada gira, exatamente como num livro aberto. Essa metade é
-   fatiada em tiras verticais e cada tira roda com um atraso crescente a
-   partir da ponta — é o defasamento entre elas que curva o papel (quem puxa
-   a ponta vê a ponta sair primeiro e o resto acompanhar).
-   Tudo em keyframes porque encadear fases em setState trava — cada troca de
-   estado reinicia a transição e o browser perde o fio da animação. */
-@keyframes album-leaf-fwd {
-  0%   { transform: rotateY(0deg);    filter: brightness(1);   opacity: 1; }
-  60%  {                              filter: brightness(.62); opacity: 1; }
-  100% { transform: rotateY(100deg);  filter: brightness(.3);  opacity: 0; }
-}
-@keyframes album-leaf-back {
-  0%   { transform: rotateY(0deg);    filter: brightness(1);   opacity: 1; }
-  60%  {                              filter: brightness(.62); opacity: 1; }
-  100% { transform: rotateY(-100deg); filter: brightness(.3);  opacity: 0; }
-}
-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: .01ms !important;
