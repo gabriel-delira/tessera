@@ -28,15 +28,20 @@ describe("lib/socialHalfQuota — hierarquia UF > país > default", () => {
 
 describe("lib/socialHalfQuota — socialHalfCap", () => {
   it("retorna null quando o evento não tem maxTickets", () => {
-    expect(socialHalfCap({ maxTickets: null, country: "BR", state: null })).toBeNull();
+    expect(socialHalfCap({ maxTickets: null, country: "BR", state: null, socialHalfBps: null })).toBeNull();
   });
 
   it("arredonda para baixo — nunca a favor de mais meias que a cota permite", () => {
     // 101 * 40% = 40.4 -> 40, não 41
-    expect(socialHalfCap({ maxTickets: 101, country: "BR", state: "SP" })).toBe(40);
+    expect(socialHalfCap({ maxTickets: 101, country: "BR", state: "SP", socialHalfBps: null })).toBe(40);
   });
 
   it("calcula 40% exato quando a divisão é redonda", () => {
-    expect(socialHalfCap({ maxTickets: 100, country: "BR", state: null })).toBe(40);
+    expect(socialHalfCap({ maxTickets: 100, country: "BR", state: null, socialHalfBps: null })).toBe(40);
+  });
+
+  it("usa socialHalfBps quando o organizador escolheu oferecer mais que a cota legal", () => {
+    // PLANO_EVOLUCAO_V2.md §10.4/D39 — slider permite mais que os 40% legais.
+    expect(socialHalfCap({ maxTickets: 100, country: "BR", state: null, socialHalfBps: 6000 })).toBe(60);
   });
 });

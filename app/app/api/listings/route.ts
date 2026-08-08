@@ -50,7 +50,9 @@ export async function POST(req: NextRequest) {
   // LAYOUT_UPDATE.md §5.2 — regra bifurcada por evento futuro/passado. A ordem
   // importa: checar isCollectible primeiro não deve abrir brecha para vender
   // uma entrada que não entra mais (ingresso CHECKED_IN de evento futuro).
-  const isCollectible = ticket.event.eventDate.getTime() < Date.now();
+  // PLANO_EVOLUCAO_V2.md §10.1/D35 — endDate, não eventDate: evento de vários
+  // dias não vira colecionável na primeira noite.
+  const isCollectible = ticket.event.endDate.getTime() < Date.now();
   if (!isCollectible && ticket.status !== "VALID") {
     return NextResponse.json({ error: "Ticket cannot be listed in its current status" }, { status: 409 });
   }

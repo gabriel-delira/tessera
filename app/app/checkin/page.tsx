@@ -10,9 +10,11 @@ import { EmptyState } from "../components/ui/EmptyState";
 
 interface CheckinResult {
   ok: boolean;
+  kind?: "ticket" | "access_code";
   tokenId?: number;
   ticketNumber?: number;
   seat?: string | null;
+  label?: string | null;
   event?: { title: string; venue: string; city: string; eventDate: string };
   error?: string;
 }
@@ -30,15 +32,21 @@ export default function CheckinPage() {
   const [cameraError, setCameraError]   = useState("");
   const scanInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const submit = useCallback(async (qrPayload: string) => {
-    if (!qrPayload.trim()) return;
+  // PLANO_EVOLUCAO_V2.md §10.5/D41 — um campo só, aceita QR de ingresso, QR
+  // de código de entrada (mesmo prefixo "tessera:") ou o código digitado na
+  // mão. O servidor decide o fluxo pela forma do que chegou; aqui só decide
+  // em qual campo do body mandar (accessCode vs qrPayload).
+  const submit = useCallback(async (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) return;
     setLoading(true);
     setResult(null);
     const token = await getAccessToken();
+    const body = trimmed.startsWith("tessera:") ? { qrPayload: trimmed } : { accessCode: trimmed };
     const r = await fetch("/api/checkin", {
       method:  "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body:    JSON.stringify({ qrPayload: qrPayload.trim() }),
+      body:    JSON.stringify(body),
     });
     const data = await r.json();
     setResult(data);
@@ -159,15 +167,15 @@ export default function CheckinPage() {
       {/* Manual input fallback */}
       <div className="mb-6 flex flex-col gap-3">
         <TextareaField
-          label="Ou cole o payload do QR manualmente:"
+          label="Ou cole o payload do QR, ou digite o código de entrada:"
           rows={3}
           className="font-mono"
-          placeholder="tessera:v1:0:12345678:abcd1234abcd1234"
+          placeholder="tessera:v1:0:12345678:abcd1234abcd1234  —  ou  4K7P-9XQ2-M3"
           value={payload}
           onChange={(e) => setPayload(e.target.value)}
         />
         <Button onClick={() => submit(payload)} disabled={loading || !payload.trim()} className="w-full">
-          {loading ? "Validando…" : "Validar QR"}
+          {loading ? "Validando…" : "Validar"}
         </Button>
       </div>
 
@@ -187,9 +195,16 @@ export default function CheckinPage() {
                 Entrada liberada
               </p>
               <p className="text-sm text-text">{result.event?.title}</p>
-              <p className="mt-1 text-xs text-text-muted">
-                Ingresso #{result.ticketNumber}{result.seat ? ` · Assento ${result.seat}` : ""} · Token #{result.tokenId}
-              </p>
+              {result.kind === "access_code" ? (
+                // Sem ingresso — código de entrada não gera colecionável.
+                <p className="mt-1 text-xs text-text-muted">
+                  Código de entrada{result.label ? ` · ${result.label}` : ""}
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-text-muted">
+                  Ingresso #{result.ticketNumber}{result.seat ? ` · Assento ${result.seat}` : ""} · Token #{result.tokenId}
+                </p>
+              )}
               <p className="text-xs text-text-muted">
                 {result.event?.venue}, {result.event?.city} · {result.event?.eventDate && new Date(result.event.eventDate).toLocaleString("pt-BR")}
               </p>

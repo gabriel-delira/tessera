@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { usdcToBrl } from "@/lib/fx";
-import { publicAvailability } from "@/lib/availability";
+import { loadCapacityUsage, publicAvailability } from "@/lib/availability";
 
 export async function GET(
   _req: NextRequest,
@@ -13,14 +13,13 @@ export async function GET(
     where: { id },
     include: {
       organizer: { select: { companyName: true, payoutWallet: true } },
-      tickets:   { select: { status: true } },
     },
   });
 
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const soldCount    = event.tickets.length;
-  const available    = publicAvailability(event, soldCount);
+  const usage        = await loadCapacityUsage(id, event);
+  const available     = publicAvailability(event, usage);
   const priceUsdc    = Number(event.ticketPriceUsdc);
   const priceBrl     = await usdcToBrl(priceUsdc);
 
@@ -32,12 +31,13 @@ export async function GET(
     city:          event.city,
     coverImageUrl: event.coverImageUrl,
     eventDate:     event.eventDate,
+    endDate:       event.endDate,
     ticketPriceUsdc: priceUsdc,
     ticketPriceBrl:  priceBrl,
     platformFeeBps:  event.platformFeeBps,
     royaltyBps:      event.royaltyBps,
     maxTickets:      event.maxTickets,
-    soldCount,
+    soldCount:     usage.sold,
     available,
     status:          event.status,
     onchainEventId:  event.onchainEventId,

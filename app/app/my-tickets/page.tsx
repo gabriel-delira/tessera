@@ -40,6 +40,7 @@ interface TicketWithEvent {
     venue: string;
     city: string;
     eventDate: string;
+    endDate: string;
     coverImageUrl: string | null;
   };
 }
@@ -97,8 +98,10 @@ const statusBadge: Record<string, { label: string; variant: "success" | "info" |
 
 // Mesma regra de elegibilidade do painel de venda em /revenda — VALID de
 // evento futuro, ou VALID/CHECKED_IN de evento já ocorrido (colecionável).
+// endDate, não eventDate — PLANO_EVOLUCAO_V2.md §10.1/D35: evento de vários
+// dias não vira colecionável na primeira noite.
 function isListable(t: TicketWithEvent): boolean {
-  const isPast = new Date(t.event.eventDate).getTime() < Date.now();
+  const isPast = new Date(t.event.endDate).getTime() < Date.now();
   return isPast ? (t.status === "VALID" || t.status === "CHECKED_IN") : t.status === "VALID";
 }
 
@@ -282,6 +285,7 @@ export default function MyTicketsPage() {
                 status: t.status,
                 eventTitle: t.event.title,
                 eventDate: t.event.eventDate,
+                endDate: t.event.endDate,
                 venue: t.event.venue,
                 city: t.event.city,
                 coverImageUrl: t.event.coverImageUrl,

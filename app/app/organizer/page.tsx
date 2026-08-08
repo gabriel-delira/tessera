@@ -10,6 +10,7 @@ import { Field } from "../components/ui/Field";
 import { EmptyState } from "../components/ui/EmptyState";
 import { NewEventModal } from "../components/NewEventModal";
 import { AssignReservedModal } from "../components/AssignReservedModal";
+import { AccessCodesModal } from "../components/AccessCodesModal";
 import { CollectionsManager } from "../components/CollectionsManager";
 
 interface LedgerRow {
@@ -37,14 +38,16 @@ interface OrganizerEvent {
   primaryRevenueBrl: number;
   resaleVolumeBrl: number;
   royaltiesBrl: number;
+  accessCodesTotal: number;
+  accessCodesPending: number;
 }
 
 // Evento recém-criado ainda não tem métricas nem contagem de tickets (nasceu
 // agora, sem venda) — o POST devolve o registro cru do Prisma (reservedTickets
 // já vem preenchido dali, mas não _count nem os agregados), então preenche o
 // resto com zero em vez de deixar a linha nova quebrar o layout da tabela.
-function withZeroMetrics(event: Omit<OrganizerEvent, "_count" | "checkins" | "primaryRevenueBrl" | "resaleVolumeBrl" | "royaltiesBrl">): OrganizerEvent {
-  return { ...event, _count: { tickets: 0 }, checkins: 0, primaryRevenueBrl: 0, resaleVolumeBrl: 0, royaltiesBrl: 0 };
+function withZeroMetrics(event: Omit<OrganizerEvent, "_count" | "checkins" | "primaryRevenueBrl" | "resaleVolumeBrl" | "royaltiesBrl" | "accessCodesTotal" | "accessCodesPending">): OrganizerEvent {
+  return { ...event, _count: { tickets: 0 }, checkins: 0, primaryRevenueBrl: 0, resaleVolumeBrl: 0, royaltiesBrl: 0, accessCodesTotal: 0, accessCodesPending: 0 };
 }
 
 interface ApplyForm {
@@ -66,6 +69,7 @@ export default function OrganizerPage() {
   const [applyForm, setApplyForm]   = useState<ApplyForm>({ companyName: "", document: "", payoutWallet: "" });
   const [newEventOpen, setNewEventOpen] = useState(false);
   const [assignTarget, setAssignTarget] = useState<OrganizerEvent | null>(null);
+  const [codesTarget, setCodesTarget] = useState<OrganizerEvent | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [ledger, setLedger] = useState<LedgerRow[]>([]);
 
@@ -189,14 +193,19 @@ export default function OrganizerPage() {
                   <th className="pb-2 pr-4 font-medium">Revenda</th>
                   <th className="pb-2 pr-4 font-medium">Royalties</th>
                   <th className="pb-2 pr-4 font-medium">Preço</th>
-                  <th className="pb-2 font-medium">Reservados</th>
+                  <th className="pb-2 pr-4 font-medium">Reservados</th>
+                  <th className="pb-2 font-medium">Códigos</th>
                 </tr>
               </thead>
               <tbody>
                 {events.map((e) => {
                   const badge = statusBadge[e.status] ?? { label: e.status, variant: "neutral" as const };
                   const sold = e._count.tickets;
-                  const hasReserveLeft = e.reservedTicketsAssigned < e.reservedTickets;
+                  // PLANO_EVOLUCAO_V2.md §10.5/D40 — nomear beneficiário (sem
+                  // cota) vale em qualquer evento sem teto; com teto, segue
+                  // dependendo da cota reservada existir e ter sobra.
+                  const canAssign =
+                    e.maxTickets === null || e.reservedTicketsAssigned < e.reservedTickets;
                   return (
                     <tr key={e.id} className="border-b border-border last:border-0">
                       <td className="py-2 pr-4 font-medium text-text">{e.title}</td>
@@ -212,19 +221,27 @@ export default function OrganizerPage() {
                       <td className="py-2 pr-4 text-text">R$ {e.resaleVolumeBrl.toFixed(2).replace(".", ",")}</td>
                       <td className="py-2 pr-4 text-text">R$ {e.royaltiesBrl.toFixed(2).replace(".", ",")}</td>
                       <td className="py-2 pr-4 text-text">{e.ticketPriceUsdc} USDC</td>
-                      <td className="py-2 text-text">
-                        {e.reservedTickets > 0 ? (
-                          <div className="flex items-center gap-2">
+                      <td className="py-2 pr-4 text-text">
+                        <div className="flex items-center gap-2">
+                          {e.maxTickets !== null && (
                             <span>{e.reservedTicketsAssigned} / {e.reservedTickets}</span>
-                            {hasReserveLeft && (
-                              <Button size="sm" variant="secondary" onClick={() => setAssignTarget(e)}>
-                                Atribuir
-                              </Button>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-text-muted">—</span>
-                        )}
+                          )}
+                          {canAssign && (
+                            <Button size="sm" variant="secondary" onClick={() => setAssignTarget(e)}>
+                              Atribuir
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-2 text-text">
+                        <div className="flex items-center gap-2">
+                          {e.accessCodesTotal > 0 && (
+                            <span>{e.accessCodesPending} / {e.accessCodesTotal}</span>
+                          )}
+                          <Button size="sm" variant="secondary" onClick={() => setCodesTarget(e)}>
+                            {e.accessCodesTotal > 0 ? "Ver" : "Gerar"}
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -273,6 +290,14 @@ export default function OrganizerPage() {
         authFetch={authFetch}
         onClose={() => setAssignTarget(null)}
         onAssigned={() => { setAssignTarget(null); loadEvents(); }}
+      />
+
+      <AccessCodesModal
+        open={!!codesTarget}
+        eventId={codesTarget?.id ?? null}
+        eventTitle={codesTarget?.title ?? ""}
+        authFetch={authFetch}
+        onClose={() => { setCodesTarget(null); loadEvents(); }}
       />
     </div>
   );

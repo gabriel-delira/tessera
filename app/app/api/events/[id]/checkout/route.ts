@@ -5,6 +5,7 @@ import { lockRate } from "@/lib/fx";
 import { psp } from "@/lib/psp";
 import { resolveGiftRecipient } from "@/lib/giftRecipient";
 import { socialHalfCap } from "@/lib/socialHalfQuota";
+import { hardCapAvailability, loadCapacityUsage, publicAvailability } from "@/lib/availability";
 import { randomUUID } from "crypto";
 
 export async function POST(
@@ -65,42 +66,44 @@ export async function POST(
     recipientUserId = resolved.recipient.id;
   }
 
-  // Reserva do organizador — PLANO_EVOLUCAO_V2.md D19. Só o próprio
-  // organizador do evento pode consumir a própria cota, e só faz sentido
-  // presenteando alguém (senão não é "reserva", é a compra normal dele).
+  // Reserva do organizador — PLANO_EVOLUCAO_V2.md D19, revisado por §10.5/D40.
+  // Só o próprio organizador do evento pode consumir a própria cota, e só faz
+  // sentido presenteando alguém (senão não é "reserva", é a compra normal
+  // dele). O check de cota (reservedTicketsAssigned < reservedTickets) só
+  // vale quando o evento TEM teto — reservedTickets é, por definição, uma
+  // fração de uma oferta finita; sem maxTickets não existe cota a esgotar, e
+  // nomear um beneficiário (bancar o mint de alguém) continua fazendo
+  // sentido mesmo assim. Antes disto, a exigência de maxTickets aqui era
+  // efeito colateral da implementação, não decisão de produto.
   if (useReservedAllocation) {
     if (!giftRecipient) {
       return NextResponse.json({ error: "Reserva exige um destinatário (giftRecipient)" }, { status: 400 });
     }
     const organizer = await prisma.organizer.findUnique({ where: { id: event.organizerId } });
     if (!organizer || organizer.userId !== user.id) return unauthorized();
-    if (event.reservedTicketsAssigned >= event.reservedTickets) {
+    if (event.maxTickets !== null && event.reservedTicketsAssigned >= event.reservedTickets) {
       return NextResponse.json({ error: "Sem cota reservada disponível para este evento" }, { status: 409 });
     }
   }
 
-  // Capacity check: minted tickets + in-flight purchases must not exceed maxTickets.
-  // The on-chain contract is the final guard, but checking here avoids charging a
-  // buyer for a ticket that would revert at mint time. null maxTickets = unlimited.
+  // Capacity check: minted tickets + in-flight purchases + códigos pendentes
+  // não podem exceder maxTickets. O contrato on-chain é a guarda final, mas
+  // checar aqui evita cobrar um comprador por um ingresso que reverteria no
+  // mint. null maxTickets = ilimitado. PLANO_EVOLUCAO_V2.md §10.6/D42 — fonte
+  // única (lib/availability.ts), pra exibição e checkout nunca mais divergir.
   //
-  // Alocação reservada usa só o teto real (maxTickets) — é exatamente pra isso
-  // que a cota foi separada. Compra pública usa o teto menos a reserva ainda
-  // não usada (lib/availability.ts), senão a reserva não protegeria nada.
+  // Alocação reservada usa só o teto real (hardCapAvailability) — é exatamente
+  // pra isso que a cota foi separada. Compra pública usa publicAvailability,
+  // que desconta a reserva ainda não usada, senão a reserva não protegeria nada.
   if (event.maxTickets !== null) {
-    const [sold, inFlight] = await Promise.all([
-      prisma.ticket.count({ where: { eventId } }),
-      prisma.purchase.count({
-        where: { eventId, listingId: null, status: { in: ["PENDING", "PAID", "MINTING"] } },
-      }),
-    ]);
-    const hardCap = event.maxTickets;
-    if (sold + inFlight >= hardCap) {
+    const usage = await loadCapacityUsage(eventId, event);
+    const hardCapLeft = hardCapAvailability(event, usage);
+    if (hardCapLeft !== null && hardCapLeft <= 0) {
       return NextResponse.json({ error: "Event is sold out" }, { status: 409 });
     }
     if (!useReservedAllocation) {
-      const unusedReserve = event.reservedTickets - event.reservedTicketsAssigned;
-      const publicCap = hardCap - unusedReserve;
-      if (sold + inFlight >= publicCap) {
+      const publicLeft = publicAvailability(event, usage);
+      if (publicLeft !== null && publicLeft <= 0) {
         return NextResponse.json({ error: "Event is sold out" }, { status: 409 });
       }
     }

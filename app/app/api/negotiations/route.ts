@@ -34,7 +34,8 @@ export async function POST(req: NextRequest) {
 
   // Teto de revenda (§5.5) vale para a oferta também — sem isso, negociação
   // vira um jeito de furar o teto oferecendo alto e o vendedor aceitando.
-  const isCollectible = listing.ticket.event.eventDate.getTime() < Date.now();
+  // endDate, não eventDate — PLANO_EVOLUCAO_V2.md §10.1/D35.
+  const isCollectible = listing.ticket.event.endDate.getTime() < Date.now();
   if (!isCollectible && listing.ticket.event.maxResaleBps) {
     const cap = (Number(listing.ticket.facePrice) * listing.ticket.event.maxResaleBps) / 10000;
     if (priceUsdc > cap + 1e-9) {

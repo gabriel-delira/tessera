@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
           venue: true,
           city: true,
           eventDate: true,
+          endDate: true, // "já aconteceu" — PLANO_EVOLUCAO_V2.md §10.1/D35
           coverImageUrl: true,
         },
       },

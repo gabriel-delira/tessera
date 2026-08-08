@@ -8,6 +8,7 @@ export interface AlbumTicket {
   status: string;
   eventTitle: string;
   eventDate: string;
+  endDate: string; // "já aconteceu" — PLANO_EVOLUCAO_V2.md §10.1/D35
   venue: string;
   city: string;
   coverImageUrl: string | null;
@@ -29,8 +30,8 @@ export function AlbumGrid({
   onSelect: (tokenId: number) => void;
 }) {
   const now = Date.now();
-  const upcoming = tickets.filter((t) => new Date(t.eventDate).getTime() >= now);
-  const past = tickets.filter((t) => new Date(t.eventDate).getTime() < now);
+  const upcoming = tickets.filter((t) => new Date(t.endDate).getTime() >= now);
+  const past = tickets.filter((t) => new Date(t.endDate).getTime() < now);
 
   const byYear = new Map<number, AlbumTicket[]>();
   for (const t of past) {

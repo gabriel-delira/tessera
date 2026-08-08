@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getBrlPerUsdc } from "@/lib/fx";
 import { computeResaleSplit } from "@/lib/split";
+import { resaleFeeBps } from "@/lib/resaleCap";
 import { computeAchievements, hashAchievements } from "@/lib/achievements";
 
 // LAYOUT_UPDATE.md §5 — duas abas: "tickets" (eventos futuros) e "collectibles"
-// (eventos já ocorridos). Corte é sempre por event.eventDate < now(), nunca por
-// EventStatus.ENDED (nada garante que esse status seja atualizado hoje — §5.1).
+// (eventos já ocorridos). Corte é sempre por event.endDate < now() (não
+// eventDate — PLANO_EVOLUCAO_V2.md §10.1/D35: um evento de vários dias não
+// vira colecionável na primeira noite), nunca por EventStatus.ENDED (nada
+// garante que esse status seja atualizado hoje — §5.1).
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const tab = searchParams.get("tab") === "collectibles" ? "collectibles" : "tickets";
@@ -17,7 +20,7 @@ export async function GET(req: NextRequest) {
       status:           "ACTIVE",
       onchainListingId: { not: null },
       ticket: {
-        event: tab === "collectibles" ? { eventDate: { lt: now } } : { eventDate: { gte: now } },
+        event: tab === "collectibles" ? { endDate: { lt: now } } : { endDate: { gte: now } },
       },
     },
     include: {
@@ -69,7 +72,11 @@ export async function GET(req: NextRequest) {
     // "Você recebe" — PLANO_EVOLUCAO_V2.md §3.8: o vendedor não fica com o
     // preço cheio, e o split é calculado aqui (não no cliente) pra usar
     // sempre a mesma fórmula que o contrato via computeResaleSplit.
-    const split = computeResaleSplit({ amount: priceBrl, platformFeeBps, royaltyBps, royaltyOrgShareBps });
+    //
+    // §10.2/D37 — quando o vendedor não lucrou (preço ≤ face), a plataforma
+    // abre mão da própria taxa, senão ele nunca fecha nos 100% originais.
+    const effectivePlatformFeeBps = resaleFeeBps({ platformFeeBps }, Number(l.price), Number(l.ticket.facePrice));
+    const split = computeResaleSplit({ amount: priceBrl, platformFeeBps: effectivePlatformFeeBps, royaltyBps, royaltyOrgShareBps });
 
     return {
       id:              l.id,

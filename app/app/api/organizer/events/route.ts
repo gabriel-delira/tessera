@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthUser, unauthorized, forbidden } from "@/lib/auth";
 import { geocodeAddress } from "@/lib/geocode";
+import { resolveMaxResaleBps } from "@/lib/resaleCap";
+import { isSocialHalfMandatory } from "@/lib/socialHalfQuota";
 
 // PLANO_EVOLUCAO_V2.md §4.4 — métricas por evento na tabela do organizador.
 // Tudo agregado em queries próprias (groupBy/reduce), nunca uma query por
@@ -24,7 +26,7 @@ export async function GET(req: NextRequest) {
   const eventIds = events.map((e) => e.id);
   if (eventIds.length === 0) return NextResponse.json({ events: [] });
 
-  const [checkinCounts, primarySales, resaleSales, royaltyEntries] = await Promise.all([
+  const [checkinCounts, primarySales, resaleSales, royaltyEntries, accessCodesTotal, accessCodesPending] = await Promise.all([
     prisma.checkin.groupBy({ by: ["eventId"], where: { eventId: { in: eventIds } }, _count: { eventId: true } }),
     // Venda primária: Purchase sem listingId. Revenda: Purchase com listingId.
     // Prisma não agrupa "is null" como bucket via groupBy num só round-trip,
@@ -45,11 +47,21 @@ export async function GET(req: NextRequest) {
       where: { userId: user.id, type: "ROYALTY_PAYOUT", purchase: { eventId: { in: eventIds } } },
       select: { amountBrl: true, purchase: { select: { eventId: true } } },
     }),
+    // Códigos de entrada — PLANO_EVOLUCAO_V2.md §10.5/D41. Total e pendentes,
+    // pra coluna "Códigos" da tabela sem exigir abrir o modal pra ver o número.
+    prisma.accessCode.groupBy({ by: ["eventId"], where: { eventId: { in: eventIds } }, _count: { eventId: true } }),
+    prisma.accessCode.groupBy({
+      by: ["eventId"],
+      where: { eventId: { in: eventIds }, usedAt: null, revokedAt: null },
+      _count: { eventId: true },
+    }),
   ]);
 
   const checkinByEvent = new Map(checkinCounts.map((c) => [c.eventId, c._count.eventId]));
   const primaryByEvent = new Map(primarySales.map((p) => [p.eventId, Number(p._sum.amountBrl ?? 0)]));
   const resaleByEvent  = new Map(resaleSales.map((p) => [p.eventId, Number(p._sum.amountBrl ?? 0)]));
+  const accessCodesTotalByEvent = new Map(accessCodesTotal.map((c) => [c.eventId, c._count.eventId]));
+  const accessCodesPendingByEvent = new Map(accessCodesPending.map((c) => [c.eventId, c._count.eventId]));
   const royaltyByEvent = new Map<string, number>();
   for (const e of royaltyEntries) {
     const eventId = e.purchase?.eventId;
@@ -62,6 +74,8 @@ export async function GET(req: NextRequest) {
     checkins: checkinByEvent.get(e.id) ?? 0,
     primaryRevenueBrl: primaryByEvent.get(e.id) ?? 0,
     resaleVolumeBrl: resaleByEvent.get(e.id) ?? 0,
+    accessCodesTotal: accessCodesTotalByEvent.get(e.id) ?? 0,
+    accessCodesPending: accessCodesPendingByEvent.get(e.id) ?? 0,
     royaltiesBrl: royaltyByEvent.get(e.id) ?? 0,
   }));
 
@@ -86,17 +100,17 @@ export async function POST(req: NextRequest) {
   const {
     title, description, venue, city,
     country, state,
-    coverImageUrl, coverVideoUrl, eventDate,
+    coverImageUrl, coverVideoUrl, eventDate, endDate,
     ticketPriceUsdc, maxTickets,
     royaltyBps, royaltyOrgShareBps,
     category, subcategory, lineup, doorsOpenAt,
     maxResaleBps, reservedTickets,
-    hasSocialHalf,
+    hasSocialHalf, socialHalfBps,
   } = body;
 
-  if (!title || !venue || !city || !eventDate || ticketPriceUsdc === undefined) {
+  if (!title || !venue || !city || !eventDate || !endDate || ticketPriceUsdc === undefined) {
     return NextResponse.json(
-      { error: "title, venue, city, eventDate and ticketPriceUsdc are required" },
+      { error: "title, venue, city, eventDate, endDate and ticketPriceUsdc are required" },
       { status: 400 }
     );
   }
@@ -113,6 +127,17 @@ export async function POST(req: NextRequest) {
   }
   if (date.getTime() <= Date.now()) {
     return NextResponse.json({ error: "eventDate must be in the future" }, { status: 400 });
+  }
+
+  // Fim do evento — PLANO_EVOLUCAO_V2.md §10.1/D35. Obrigatório e precisa vir
+  // depois do início: é o que decide, daqui pra frente, se um ingresso ainda
+  // é ingresso ou já virou colecionável (endDate < now()).
+  const endDateParsed = new Date(endDate);
+  if (Number.isNaN(endDateParsed.getTime())) {
+    return NextResponse.json({ error: "endDate is invalid" }, { status: 400 });
+  }
+  if (endDateParsed.getTime() <= date.getTime()) {
+    return NextResponse.json({ error: "endDate must be after eventDate" }, { status: 400 });
   }
 
   let max: number | null = null;
@@ -147,17 +172,17 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Teto de revenda — LAYOUT_UPDATE.md §5.5. null = mercado livre. Nunca abaixo
-  // de 100% (10000 bps): o teto protege comprador de sobrepreço, não existe
-  // para forçar revenda com prejuízo.
-  let finalMaxResaleBps: number | null = null;
-  if (maxResaleBps !== undefined && maxResaleBps !== null && maxResaleBps !== "") {
-    const bps = Number(maxResaleBps);
-    if (!Number.isInteger(bps) || bps < 10000) {
-      return NextResponse.json({ error: "maxResaleBps must be an integer ≥ 10000 (100%), or omitted for no cap" }, { status: 400 });
-    }
-    finalMaxResaleBps = bps;
+  // Teto de revenda — PLANO_EVOLUCAO_V2.md §10.2/D36-D37. Categoria ESPORTE
+  // trava em 100% (conformidade — art.166 da Lei Geral do Esporte). Nas
+  // demais, 100% é default de PRODUTO: o organizador pode afrouxar (sumiu o
+  // piso de "nunca abaixo de 100%" — nada na lei impede exigir desconto).
+  const requestedMaxResaleBps =
+    maxResaleBps !== undefined && maxResaleBps !== null && maxResaleBps !== "" ? Number(maxResaleBps) : null;
+  const resaleCapResult = resolveMaxResaleBps(finalCategory, requestedMaxResaleBps);
+  if (!resaleCapResult.ok) {
+    return NextResponse.json({ error: resaleCapResult.error }, { status: 400 });
   }
+  const finalMaxResaleBps = resaleCapResult.bps;
 
   // Reserva do organizador — PLANO_EVOLUCAO_V2.md D19. Só faz sentido dentro
   // do teto do evento; sem maxTickets não há oferta pública pra reduzir.
@@ -182,6 +207,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "state must be a 2-letter UF code" }, { status: 400 });
   }
 
+  // Meia-entrada — PLANO_EVOLUCAO_V2.md §10.3-10.4/D38-D39. Categoria coberta
+  // pela Lei 12.933/2013 FORÇA hasSocialHalf=true e um piso de 40% (4000 bps),
+  // ignorando o que veio do body — UI desabilitada não é validação; quem
+  // decide é o servidor. Fora dessas categorias, o organizador escolhe livre.
+  const mandatorySocialHalf = isSocialHalfMandatory(finalCategory);
+  let finalHasSocialHalf = hasSocialHalf === true;
+  let finalSocialHalfBps: number | null = null;
+  if (socialHalfBps !== undefined && socialHalfBps !== null && socialHalfBps !== "") {
+    const bps = Number(socialHalfBps);
+    if (!Number.isInteger(bps) || bps < 0 || bps > 10000) {
+      return NextResponse.json({ error: "socialHalfBps must be an integer between 0 and 10000" }, { status: 400 });
+    }
+    finalSocialHalfBps = bps;
+  }
+  if (mandatorySocialHalf) {
+    finalHasSocialHalf = true;
+    if (finalSocialHalfBps !== null && finalSocialHalfBps < 4000) {
+      return NextResponse.json({ error: "socialHalfBps must be at least 4000 (40%) for this category" }, { status: 400 });
+    }
+  }
+
   const geo = await geocodeAddress(venue, city);
 
   const event = await prisma.event.create({
@@ -198,6 +244,7 @@ export async function POST(req: NextRequest) {
       coverImageUrl:      coverImageUrl || null,
       coverVideoUrl:      coverVideoUrl || null,
       eventDate:          date,
+      endDate:            endDateParsed,
       ticketPriceUsdc:    price,
       maxTickets:         max,
       platformFeeBps,
@@ -210,7 +257,8 @@ export async function POST(req: NextRequest) {
       doorsOpenAt:         doorsOpen,
       maxResaleBps:        finalMaxResaleBps,
       reservedTickets:     finalReservedTickets,
-      hasSocialHalf:       hasSocialHalf === true,
+      hasSocialHalf:       finalHasSocialHalf,
+      socialHalfBps:       finalSocialHalfBps,
     },
   });
 

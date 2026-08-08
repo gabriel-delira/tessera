@@ -133,6 +133,7 @@ async function main() {
     lineup?: string;
     coverImageUrl?: string;
     eventDate: Date;
+    endDate?: Date; // default: +4h — PLANO_EVOLUCAO_V2.md §10.1/D35
     doorsOpenAt?: Date;
     ticketPriceUsdc: number;
     maxTickets: number | null;
@@ -210,7 +211,8 @@ async function main() {
       ticketPriceUsdc: 90.0,
       maxTickets: 3,
       status: EventStatus.ON_SALE, // esgotado via contagem de tickets abaixo
-      maxResaleBps: null,
+      // ESPORTE — teto trava em 100% (Lei Geral do Esporte, art.166). §10.2/D36.
+      maxResaleBps: 10000,
     },
     {
       id: "seed-event-5",
@@ -223,6 +225,8 @@ async function main() {
       category: EventCategory.CONFERENCIA,
       subcategory: "Tecnologia",
       eventDate: daysFrom(70),
+      // Dois dias de verdade — exercita §10.1/D35 (endDate ≠ eventDate).
+      endDate: new Date(daysFrom(70).getTime() + 30 * 3_600_000),
       ticketPriceUsdc: 250.0,
       maxTickets: 800,
       status: EventStatus.PENDING_APPROVAL,
@@ -291,7 +295,8 @@ async function main() {
       ticketPriceUsdc: 30.0,
       maxTickets: 5000,
       status: EventStatus.ON_SALE,
-      maxResaleBps: null,
+      // ESPORTE — teto trava em 100% (Lei Geral do Esporte, art.166). §10.2/D36.
+      maxResaleBps: 10000,
     },
     {
       id: "seed-event-10",
@@ -358,6 +363,7 @@ async function main() {
       lineup: e.lineup,
       coverImageUrl: e.coverImageUrl,
       eventDate: e.eventDate,
+      endDate: e.endDate ?? new Date(e.eventDate.getTime() + 4 * 3_600_000),
       doorsOpenAt: e.doorsOpenAt,
       ticketPriceUsdc: e.ticketPriceUsdc,
       maxTickets: e.maxTickets,

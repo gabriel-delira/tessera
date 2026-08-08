@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { usdcToBrl } from "@/lib/fx";
 import { distanceKm } from "@/lib/geo";
-import { publicAvailability } from "@/lib/availability";
+import { loadCapacityUsageMany, publicAvailability } from "@/lib/availability";
 import { PageTitle } from "./components/ui/PageTitle";
 import { EventCard } from "./components/ui/EventCard";
 import { EmptyState } from "./components/ui/EmptyState";
@@ -51,7 +51,7 @@ async function getFeaturedSlides(): Promise<CarouselSlide[]> {
   // 1) Pin do admin — LAYOUT_UPDATE.md §4.1, passo 1
   const pinned = await prisma.event.findMany({
     where: { status: { in: ["ON_SALE", "PAUSED"] }, featuredRank: { not: null } },
-    include: { organizer: { select: { companyName: true } }, _count: { select: { tickets: true } } },
+    include: { organizer: { select: { companyName: true } } },
     orderBy: { featuredRank: "asc" },
     take: 5,
   });
@@ -71,7 +71,7 @@ async function getFeaturedSlides(): Promise<CarouselSlide[]> {
     if (recentSales.length > 0) {
       const bySales = await prisma.event.findMany({
         where: { id: { in: recentSales.map((r) => r.eventId) }, status: { in: ["ON_SALE", "PAUSED"] } },
-        include: { organizer: { select: { companyName: true } }, _count: { select: { tickets: true } } },
+        include: { organizer: { select: { companyName: true } } },
       });
       // preserva a ordem de vendas
       const order = new Map(recentSales.map((r, i) => [r.eventId, i]));
@@ -84,7 +84,7 @@ async function getFeaturedSlides(): Promise<CarouselSlide[]> {
       const exclude = [...pinned, ...ranked].map((e) => e.id);
       const fallback = await prisma.event.findMany({
         where: { status: { in: ["ON_SALE", "PAUSED"] }, id: { notIn: exclude }, eventDate: { gte: now } },
-        include: { organizer: { select: { companyName: true } }, _count: { select: { tickets: true } } },
+        include: { organizer: { select: { companyName: true } } },
         orderBy: { eventDate: "asc" },
         take: stillNeeded,
       });
@@ -93,10 +93,11 @@ async function getFeaturedSlides(): Promise<CarouselSlide[]> {
   }
 
   const combined = [...pinned, ...ranked];
+  const usageByEvent = await loadCapacityUsageMany(combined);
   return Promise.all(
     combined.map(async (e, i) => {
       const priceBrl = await usdcToBrl(Number(e.ticketPriceUsdc));
-      const available = publicAvailability(e, e._count.tickets);
+      const available = publicAvailability(e, usageByEvent.get(e.id)!);
       const soldOut = available !== null && available <= 0;
       return {
         href: `/events/${e.id}`,
@@ -132,8 +133,7 @@ const SORT_ORDER_BY = {
 };
 type SortKey = keyof typeof SORT_ORDER_BY;
 
-function isSoldOut(e: { maxTickets: number | null; reservedTickets: number; reservedTicketsAssigned: number; sold: number }): boolean {
-  const available = publicAvailability(e, e.sold);
+function isSoldOut(available: number | null): boolean {
   return available !== null && available <= 0;
 }
 
@@ -180,7 +180,6 @@ export default async function CatalogPage({
       },
       include: {
         organizer: { select: { companyName: true } },
-        _count:    { select: { tickets: true } },
       },
       orderBy: SORT_ORDER_BY[sort],
     }),
@@ -193,12 +192,17 @@ export default async function CatalogPage({
     getFeaturedSlides(),
   ]);
 
+  const usageByEvent = await loadCapacityUsageMany(events);
   const cards = await Promise.all(
-    events.map(async (e) => ({
-      ...e,
-      priceBrl: await usdcToBrl(Number(e.ticketPriceUsdc)),
-      sold:     e._count.tickets,
-    }))
+    events.map(async (e) => {
+      const usage = usageByEvent.get(e.id)!;
+      return {
+        ...e,
+        priceBrl:  await usdcToBrl(Number(e.ticketPriceUsdc)),
+        sold:      usage.sold,
+        available: publicAvailability(e, usage),
+      };
+    })
   );
 
   // "Perto de você" reordena tudo por distância — sobrepõe o sort escolhido
@@ -219,7 +223,7 @@ export default async function CatalogPage({
   // preço) ou por distância, reordenar por cima quebraria o que foi pedido.
   const demoteSoldOut = sort === "date" && !nearPoint;
   const orderedCards = demoteSoldOut
-    ? [...cards.filter((e) => !isSoldOut(e)), ...cards.filter((e) => isSoldOut(e))]
+    ? [...cards.filter((e) => !isSoldOut(e.available)), ...cards.filter((e) => isSoldOut(e.available))]
     : cards;
 
   return (
@@ -255,9 +259,9 @@ export default async function CatalogPage({
       ) : (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {orderedCards.map((e, i) => {
-            const soldOut = isSoldOut(e);
+            const soldOut = isSoldOut(e.available);
             const date = new Date(e.eventDate);
-            const available = publicAvailability(e, e.sold);
+            const available = e.available;
             const publicCapacity = e.maxTickets !== null ? e.maxTickets - e.reservedTickets : null;
             const availablePct =
               publicCapacity !== null && available !== null

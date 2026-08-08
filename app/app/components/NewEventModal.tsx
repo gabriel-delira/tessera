@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { Modal } from "./ui/Modal";
 import { Field, TextareaField, SelectField } from "./ui/Field";
+import { RangeField } from "./ui/RangeField";
 import { Button } from "./ui/Button";
-import { getSocialHalfQuotaBps } from "@/lib/socialHalfQuota";
+import { getSocialHalfQuotaBps, isSocialHalfMandatory } from "@/lib/socialHalfQuota";
+import { isResaleCapMandatory, LEGAL_CAP_BPS } from "@/lib/resaleCap";
 
 export interface NewEventForm {
   title: string;
@@ -16,6 +18,7 @@ export interface NewEventForm {
   coverImageUrl: string;
   coverVideoUrl: string;
   eventDate: string;
+  endDate: string;
   ticketPriceUsdc: string;
   maxTickets: string;
   category: string;
@@ -25,14 +28,15 @@ export interface NewEventForm {
   maxResaleBps: string;
   reservedTickets: string;
   hasSocialHalf: boolean;
+  socialHalfBps: string;
 }
 
 const EMPTY_FORM: NewEventForm = {
   title: "", description: "", venue: "", city: "", country: "BR", state: "",
   coverImageUrl: "", coverVideoUrl: "",
-  eventDate: "", ticketPriceUsdc: "", maxTickets: "",
+  eventDate: "", endDate: "", ticketPriceUsdc: "", maxTickets: "",
   category: "OUTRO", subcategory: "", lineup: "", doorsOpenAt: "", maxResaleBps: "",
-  reservedTickets: "", hasSocialHalf: false,
+  reservedTickets: "", hasSocialHalf: false, socialHalfBps: "",
 };
 
 // UF — só usada pra hierarquia da cota de meia (§5.5/D24); "sem UF" cai pra
@@ -51,13 +55,17 @@ const CATEGORY_OPTIONS = [
   { value: "OUTRO", label: "Outro" },
 ];
 
-// LAYOUT_UPDATE.md §5.5 — opções usuais + "sem limite". O organizador pode
-// afrouxar depois, nunca apertar (apertar quebraria anúncios já publicados).
+// PLANO_EVOLUCAO_V2.md §10.2/D36-D37 — 100% é o default de PRODUTO fora de
+// ESPORTE, não imposição legal; por isso o organizador pode ir abaixo (revenda
+// só com desconto) ou acima (com o aviso de exposição ao CDC). Em ESPORTE o
+// teto trava em 100% por conformidade — ver renderização condicional abaixo.
 const RESALE_CAP_OPTIONS = [
   { value: "", label: "Sem limite (mercado livre)" },
+  { value: "5000", label: "Até 50% do preço original" },
+  { value: "8000", label: "Até 80% do preço original" },
   { value: "10000", label: "Até 100% do preço original" },
-  { value: "15000", label: "Até 150% do preço original" },
-  { value: "20000", label: "Até 200% do preço original" },
+  { value: "15000", label: "Até 150% do preço original — risco CDC (sobrepreço)" },
+  { value: "20000", label: "Até 200% do preço original — risco CDC (sobrepreço)" },
 ];
 
 const STEPS = [
@@ -69,7 +77,7 @@ const STEPS = [
 const DRAFT_KEY = "tessera:new-event-draft";
 
 function step1Valid(f: NewEventForm): boolean {
-  return !!(f.title && f.venue && f.city && f.eventDate);
+  return !!(f.title && f.venue && f.city && f.eventDate && f.endDate && f.endDate > f.eventDate);
 }
 function step2Valid(f: NewEventForm): boolean {
   const price = parseFloat(f.ticketPriceUsdc);
@@ -123,8 +131,20 @@ export function NewEventModal({
   const set = <K extends keyof NewEventForm>(key: K, value: NewEventForm[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
+  // PLANO_EVOLUCAO_V2.md §10.2-10.4/D36-D39 — trocar a categoria pode LIGAR
+  // conformidade obrigatória (teto de revenda em ESPORTE; piso de meia nas
+  // categorias cobertas). O servidor valida de qualquer jeito, mas forçar
+  // aqui também evita o organizador digitar um valor que vai ser rejeitado.
+  const setCategory = (cat: string) =>
+    setForm((f) => ({
+      ...f,
+      category: cat,
+      maxResaleBps: isResaleCapMandatory(cat) ? String(LEGAL_CAP_BPS) : f.maxResaleBps,
+      hasSocialHalf: isSocialHalfMandatory(cat) ? true : f.hasSocialHalf,
+    }));
+
   const goNext = () => {
-    if (step === 1 && !step1Valid(form)) { setError("Preencha título, endereço, cidade e data."); return; }
+    if (step === 1 && !step1Valid(form)) { setError("Preencha título, endereço, cidade, e as datas de início e término (término precisa ser depois do início)."); return; }
     if (step === 2 && !step2Valid(form)) { setError("Informe um preço de ingresso válido."); return; }
     setError(null);
     setStep((s) => (s === 3 ? s : ((s + 1) as 2 | 3)));
@@ -197,12 +217,19 @@ export function NewEventModal({
               onChange={(e) => set("venue", e.target.value)}
             />
             <Field
-              label="Data e hora"
+              label="Data e hora de início"
               type="datetime-local"
               value={form.eventDate}
               onChange={(e) => set("eventDate", e.target.value)}
             />
-            <SelectField label="Categoria" value={form.category} onChange={(e) => set("category", e.target.value)}>
+            <Field
+              label="Data e hora de término"
+              type="datetime-local"
+              min={form.eventDate || undefined}
+              value={form.endDate}
+              onChange={(e) => set("endDate", e.target.value)}
+            />
+            <SelectField label="Categoria" value={form.category} onChange={(e) => setCategory(e.target.value)}>
               {CATEGORY_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
             </SelectField>
             <Field
@@ -231,34 +258,88 @@ export function NewEventModal({
               value={form.maxTickets}
               onChange={(e) => set("maxTickets", e.target.value)}
             />
-            <SelectField
-              label="Teto de revenda"
-              className="sm:col-span-2"
-              value={form.maxResaleBps}
-              onChange={(e) => set("maxResaleBps", e.target.value)}
-            >
-              {RESALE_CAP_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </SelectField>
+            {isResaleCapMandatory(form.category) ? (
+              <div className="sm:col-span-2 flex flex-col gap-1">
+                <span className="text-sm font-medium text-text">Teto de revenda</span>
+                <p className="text-sm text-text">
+                  Travado em 100% do preço original — Lei Geral do Esporte (14.597/2023), art. 166:
+                  vender ingresso de evento esportivo por preço superior ao estampado é crime.
+                </p>
+              </div>
+            ) : (
+              <SelectField
+                label="Teto de revenda"
+                className="sm:col-span-2"
+                value={form.maxResaleBps}
+                onChange={(e) => set("maxResaleBps", e.target.value)}
+              >
+                {RESALE_CAP_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </SelectField>
+            )}
             {/* Lotes, áreas e ingresso por dia chegam com o modelo TicketType
                 (Onda 3) — hoje o evento tem um preço e uma capacidade só. */}
-            <div className="sm:col-span-2 flex flex-col gap-1.5">
-              <label className="flex items-center gap-2 text-sm text-text">
-                <input
-                  type="checkbox"
-                  checked={form.hasSocialHalf}
-                  onChange={(e) => set("hasSocialHalf", e.target.checked)}
-                  className="h-4 w-4 rounded border-border-strong accent-ouro-500"
-                />
-                Este evento tem meia-entrada
-              </label>
-              {form.hasSocialHalf && (
-                <p className="text-xs text-text-muted">
-                  Cota de {getSocialHalfQuotaBps("BR", form.state || null) / 100}% da capacidade
-                  {form.state ? ` (${form.state})` : " (padrão nacional)"} — ingresso de meia é
-                  nominal e não pode ser revendido.
-                </p>
-              )}
-            </div>
+            {(() => {
+              const mandatory = isSocialHalfMandatory(form.category);
+              const legalQuotaPct = getSocialHalfQuotaBps("BR", form.state || null) / 100;
+              const checked = mandatory || form.hasSocialHalf;
+              const currentPct = form.socialHalfBps ? Number(form.socialHalfBps) / 100 : legalQuotaPct;
+
+              return (
+                <div className="sm:col-span-2 flex flex-col gap-1.5">
+                  {form.maxTickets ? (
+                    // Com capacidade definida, o organizador pode oferecer MAIS
+                    // que a cota legal — checkbox binário não expressa isso.
+                    <RangeField
+                      label={`Meia-entrada — ${checked ? `${currentPct}%` : "desativada"}`}
+                      min={mandatory ? 40 : 0}
+                      max={100}
+                      step={5}
+                      value={checked ? currentPct : 0}
+                      onChange={(e) => {
+                        const pct = Number(e.target.value);
+                        const active = mandatory || pct > 0;
+                        setForm((f) => ({
+                          ...f,
+                          hasSocialHalf: active,
+                          socialHalfBps: active ? String(pct * 100) : "",
+                        }));
+                      }}
+                      hint={
+                        checked
+                          ? `= ${Math.floor((Number(form.maxTickets) * currentPct) / 100)} de ${form.maxTickets} ingressos`
+                          : "Arraste para oferecer meia-entrada"
+                      }
+                    />
+                  ) : (
+                    // Sem capacidade, não há total sobre o que calcular
+                    // percentual — 40% de "ilimitado" não é um número.
+                    <label className="flex items-center gap-2 text-sm text-text">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={mandatory}
+                        onChange={(e) => set("hasSocialHalf", e.target.checked)}
+                        className="h-4 w-4 rounded border-border-strong accent-ouro-500 disabled:opacity-60"
+                      />
+                      Este evento tem meia-entrada
+                    </label>
+                  )}
+                  {mandatory && (
+                    <p className="text-xs text-text-muted">
+                      Obrigatório para esta categoria — Lei 12.933/2013 assegura o benefício em pelo
+                      menos 40% dos ingressos de espetáculo artístico-cultural ou esportivo.
+                    </p>
+                  )}
+                  {checked && (
+                    <p className="text-xs text-text-muted">
+                      Cota legal de referência: {legalQuotaPct}%
+                      {form.state ? ` (${form.state})` : " (padrão nacional)"} — ingresso de meia é
+                      nominal e não pode ser revendido.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -285,19 +366,29 @@ export function NewEventModal({
               value={form.coverVideoUrl}
               onChange={(e) => set("coverVideoUrl", e.target.value)}
             />
-            <Field
-              label={
-                form.maxTickets
-                  ? "Qtd. de ingressos reservados (opcional)"
-                  : "Qtd. de ingressos reservados — defina uma quantidade máxima no passo 2 primeiro"
-              }
-              type="number"
-              min="0"
-              disabled={!form.maxTickets}
-              placeholder="Uso próprio, imprensa, cortesias…"
-              value={form.reservedTickets}
-              onChange={(e) => set("reservedTickets", e.target.value)}
-            />
+            {form.maxTickets ? (
+              // PLANO_EVOLUCAO_V2.md §10.5/D40 — segurar vaga só existe com
+              // teto (é o que se subtrai da oferta pública).
+              <Field
+                label="Qtd. de vagas a reservar (opcional)"
+                type="number"
+                min="0"
+                placeholder="Uso próprio, imprensa, cortesias…"
+                value={form.reservedTickets}
+                onChange={(e) => set("reservedTickets", e.target.value)}
+              />
+            ) : (
+              // Sem teto não há o que segurar — mas presentear (nomear um
+              // beneficiário, que ganha ingresso + colecionável) continua
+              // valendo em qualquer evento, feito depois na tabela de eventos.
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-text">Ingressos reservados</span>
+                <p className="text-sm text-text-muted">
+                  Este evento não tem quantidade máxima, então não há vaga pra segurar. Você ainda
+                  pode presentear alguém depois de criar o evento, na tabela de &quot;Meus eventos&quot;.
+                </p>
+              </div>
+            )}
             <TextareaField
               label="Descrição (opcional)"
               className="col-span-full h-24"

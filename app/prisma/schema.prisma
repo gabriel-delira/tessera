@@ -146,6 +146,7 @@ model User {
   purchasesReceived Purchase[] @relation("PurchaseRecipient")
   withdrawals   Withdrawal[]
   checkins      Checkin[]
+  accessEntries AccessEntry[]
   ledgerEntries LedgerEntry[]
   negotiations  Negotiation[]
 
@@ -215,6 +216,12 @@ model Event {
   coverImageUrl        String?     @map("cover_image_url")
   coverVideoUrl        String?     @map("cover_video_url") // usado só no carrossel de destaque (LAYOUT_UPDATE.md §4.1); nunca no grid de cards
   eventDate            DateTime    @map("event_date")
+  // Fim do evento — PLANO_EVOLUCAO_V2.md §10.1/D35. Obrigatório; backfill dos
+  // eventos existentes copia eventDate (nenhum ingresso muda de aba na
+  // migração). "Já aconteceu" (corte ingresso↔colecionável) passa a ser
+  // endDate < now(), não eventDate < now() — um evento de vários dias não
+  // pode virar colecionável na primeira noite.
+  endDate              DateTime    @map("end_date")
   ticketPriceUsdc      Decimal     @map("ticket_price_usdc") @db.Decimal(18, 6)
   maxTickets           Int?        @map("max_tickets")
   platformFeeBps       Int         @default(800) @map("platform_fee_bps")
@@ -245,19 +252,70 @@ model Event {
   reservedTickets         Int @default(0) @map("reserved_tickets")
   reservedTicketsAssigned Int @default(0) @map("reserved_tickets_assigned")
 
-  // Meia-entrada — PLANO_EVOLUCAO_V2.md §5.5/D24-D25. hasSocialHalf é o opt-in
-  // do organizador (nem todo evento tem obrigação de meia). A cota em si NÃO é
-  // gravada aqui — é calculada em runtime a partir de country/state via
-  // lib/socialHalfQuota.ts, pra mudança de lei estadual não exigir migração
-  // nem retrofit em eventos já criados.
+  // Meia-entrada — PLANO_EVOLUCAO_V2.md §5.5/D24-D25, §10.3/D38. hasSocialHalf
+  // é o opt-in do organizador — mas em categoria coberta pela Lei 12.933/2013
+  // (lib/socialHalfQuota.ts:isSocialHalfMandatory) o servidor força true,
+  // ignorando o body. A cota legal em si (UF→país→default) segue calculada em
+  // runtime, nunca gravada — mudança de lei estadual não deve exigir migração.
   hasSocialHalf Boolean @default(false) @map("has_social_half")
+  // Percentual escolhido pelo organizador — null = usa a cota legal calculada
+  // em runtime (comportamento de todo evento criado antes desta fatia). Só
+  // passa a ter valor quando o organizador usa o slider/checkbox pra oferecer
+  // mais que o mínimo legal. Em categoria coberta, o servidor recusa < 4000.
+  socialHalfBps Int? @map("social_half_bps")
 
-  organizer Organizer  @relation(fields: [organizerId], references: [id])
-  tickets   Ticket[]
-  purchases Purchase[]
-  slot      Slot?
+  organizer   Organizer    @relation(fields: [organizerId], references: [id])
+  tickets     Ticket[]
+  purchases   Purchase[]
+  slot        Slot?
+  accessCodes  AccessCode[]
+  accessEntries AccessEntry[]
 
   @@map("events")
+}
+
+// Código de entrada avulso — PLANO_EVOLUCAO_V2.md §10.5/D41, §10.6/D43. Dá só
+// entrada, sem NFT/colecionável — não compete com a reserva (que dá os dois).
+// `code` é segredo aleatório ao portador (Crockford Base32, 10 chars), único
+// GLOBALMENTE (não por evento) porque POST /api/checkin não recebe eventId —
+// deriva do que foi escaneado/digitado. Guardado em plaintext de propósito: o
+// organizador precisa re-listar "qual código mandei pra quem" (label), e o
+// dano de vazamento é limitado (entrada única, revogável, vaga já contada).
+model AccessCode {
+  id        String    @id @default(cuid())
+  eventId   String    @map("event_id")
+  code      String    @unique
+  label     String?
+  createdBy String    @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  usedAt    DateTime? @map("used_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  event Event        @relation(fields: [eventId], references: [id])
+  entry AccessEntry?
+
+  @@index([eventId])
+  @@map("access_codes")
+}
+
+// Entrada via AccessCode — tabela PRÓPRIA, não Checkin. Checkin.tokenId exige
+// Ticket (FK obrigatória); entrada por código não tem ingresso. Fundir os
+// dois quebraria computeAchievements (lib/achievements.ts, percorre
+// checkin.ticket.event.city) e faria o produto contar presença de quem não
+// tem colecionável como conquista — que é exatamente o que não deve.
+model AccessEntry {
+  id           String   @id @default(cuid())
+  accessCodeId String   @unique @map("access_code_id")
+  eventId      String   @map("event_id")
+  staffUserId  String   @map("staff_user_id")
+  scannedAt    DateTime @default(now()) @map("scanned_at")
+
+  accessCode AccessCode @relation(fields: [accessCodeId], references: [id])
+  event      Event      @relation(fields: [eventId], references: [id])
+  staff      User       @relation(fields: [staffUserId], references: [id])
+
+  @@index([eventId])
+  @@map("access_entries")
 }
 
 model Ticket {

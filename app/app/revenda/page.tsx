@@ -74,7 +74,7 @@ interface MyTicket {
   tokenId: number;
   ticketNumber: number;
   status: string;
-  event: { title: string; eventDate: string };
+  event: { title: string; eventDate: string; endDate: string };
 }
 
 interface CheckoutState {
@@ -153,9 +153,10 @@ function MarketPageInner() {
   }, [ready, authenticated, tab, fetchListings, fetchMyTickets]);
 
   // Ingressos elegíveis para anúncio na aba corrente — §5: VALID de evento
-  // futuro na aba "tickets"; VALID ou CHECKED_IN de evento passado em "collectibles".
+  // futuro na aba "tickets"; VALID ou CHECKED_IN de evento passado em
+  // "collectibles". endDate, não eventDate — PLANO_EVOLUCAO_V2.md §10.1/D35.
   const sellableTickets = myTickets.filter((t) => {
-    const isPast = new Date(t.event.eventDate).getTime() < Date.now();
+    const isPast = new Date(t.event.endDate).getTime() < Date.now();
     if (tab === "collectibles") return isPast && (t.status === "VALID" || t.status === "CHECKED_IN");
     return !isPast && t.status === "VALID";
   });

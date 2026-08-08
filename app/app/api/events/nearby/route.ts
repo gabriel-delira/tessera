@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { usdcToBrl } from "@/lib/fx";
 import { distanceKm, parseBboxParam } from "@/lib/geo";
-import { publicAvailability } from "@/lib/availability";
+import { loadCapacityUsageMany, publicAvailability } from "@/lib/availability";
 import type { Prisma } from "@prisma/client";
 
 // Dois modos, mutuamente exclusivos:
@@ -35,7 +35,6 @@ export async function GET(req: NextRequest) {
 
   const events = await prisma.event.findMany({
     where,
-    include: { _count: { select: { tickets: true } } },
     orderBy: { eventDate: "asc" },
     take: bbox ? 500 : undefined,
   });
@@ -55,6 +54,8 @@ export async function GET(req: NextRequest) {
       .slice(0, 200);
   }
 
+  const usageByEvent = await loadCapacityUsageMany(withDistance);
+
   const withPrice = await Promise.all(
     withDistance.map(async (e) => ({
       id: e.id,
@@ -68,7 +69,7 @@ export async function GET(req: NextRequest) {
       subcategory: e.subcategory,
       eventDate: e.eventDate,
       priceBrl: await usdcToBrl(Number(e.ticketPriceUsdc)),
-      available: publicAvailability(e, e._count.tickets),
+      available: publicAvailability(e, usageByEvent.get(e.id)!),
       distanceKm: Math.round(e.distanceKm * 10) / 10,
     }))
   );

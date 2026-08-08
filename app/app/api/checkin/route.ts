@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/db";
 import { getAuthUser, unauthorized } from "@/lib/auth";
+import { normalizeAccessCode, parseAccessCodeQrPayload } from "@/lib/accessCode";
+import { isRateLimited } from "@/lib/rateLimit";
 
 if (!process.env.QR_SECRET) throw new Error("QR_SECRET env var not set — refusing to start");
 const QR_SECRET: string = process.env.QR_SECRET;
@@ -35,8 +37,14 @@ function validateQrPayload(payload: string): { tokenId: number; userId: string }
 }
 
 // POST /api/checkin
-// Body: { qrPayload: string }
+// Body: { qrPayload: string } — ingresso (QR rotativo) OU código de entrada
+// (QR com prefixo "tessera:code:v1:" ou os 10 caracteres digitados direto).
 // Auth: any authenticated user with STAFF or ADMIN role
+//
+// PLANO_EVOLUCAO_V2.md §10.5/D41 — um endpoint só, não uma aba separada como
+// o D20 previa: a tela de check-in tem uma câmera e um campo; obrigar o
+// operador a escolher o modo antes de escanear é fricção na porta, onde tem
+// fila. O servidor decide pela forma do que chegou.
 export async function POST(req: NextRequest) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
@@ -46,13 +54,26 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const { qrPayload } = body as { qrPayload?: string };
+  const { qrPayload, accessCode } = body as { qrPayload?: string; accessCode?: string };
 
-  if (!qrPayload) {
-    return NextResponse.json({ error: "qrPayload is required" }, { status: 400 });
+  if (!qrPayload && !accessCode) {
+    return NextResponse.json({ error: "qrPayload or accessCode is required" }, { status: 400 });
   }
 
-  const parsed = validateQrPayload(qrPayload.trim());
+  // Forma decide o fluxo: accessCode explícito, ou qrPayload com o prefixo
+  // do código, cai no check-in por código; senão, é o QR de ingresso normal.
+  const codeFromQr = qrPayload ? parseAccessCodeQrPayload(qrPayload.trim()) : null;
+  const rawCode = accessCode ?? codeFromQr;
+
+  if (rawCode !== null) {
+    return handleAccessCodeCheckin(rawCode, user.id);
+  }
+
+  return handleTicketCheckin(qrPayload!.trim(), user.id);
+}
+
+async function handleTicketCheckin(qrPayload: string, staffUserId: string) {
+  const parsed = validateQrPayload(qrPayload);
   if (parsed === null) {
     return NextResponse.json({ error: "Invalid or expired QR code" }, { status: 422 });
   }
@@ -94,16 +115,64 @@ export async function POST(req: NextRequest) {
       data: {
         tokenId,
         eventId:     ticket.eventId,
-        staffUserId: user.id,
+        staffUserId,
       },
     }),
   ]);
 
   return NextResponse.json({
     ok:           true,
+    kind:         "ticket",
     tokenId,
     ticketNumber: ticket.ticketNumber,
     seat:         ticket.seat,
     event:        ticket.event,
   });
+}
+
+// PLANO_EVOLUCAO_V2.md §10.5-10.6/D41-D43 — entrada por código vira
+// AccessEntry, NÃO Checkin: Checkin.tokenId exige Ticket, que entrada por
+// código não tem. Fundir os dois faria computeAchievements contar presença
+// de quem não tem colecionável como conquista.
+async function handleAccessCodeCheckin(rawCode: string, staffUserId: string) {
+  // Força bruta é o único ataque que a entropia do código não elimina
+  // sozinha — por staffUserId porque a rota já exige STAFF/ADMIN autenticado.
+  if (isRateLimited(`checkin:${staffUserId}`, 30, 60_000)) {
+    return NextResponse.json({ error: "Too many attempts — wait a moment" }, { status: 429 });
+  }
+
+  const code = normalizeAccessCode(rawCode);
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const accessCode = await tx.accessCode.findUnique({
+        where: { code },
+        include: { event: { select: { title: true, venue: true, city: true, eventDate: true } } },
+      });
+      if (!accessCode) throw new CheckinError("Invalid access code", 422);
+      if (accessCode.revokedAt !== null) throw new CheckinError("Access code was revoked", 409);
+      if (accessCode.usedAt !== null) throw new CheckinError("Access code already used", 409);
+
+      const now = new Date();
+      await tx.accessCode.update({ where: { id: accessCode.id }, data: { usedAt: now } });
+      await tx.accessEntry.create({
+        data: { accessCodeId: accessCode.id, eventId: accessCode.eventId, staffUserId, scannedAt: now },
+      });
+
+      return { label: accessCode.label, event: accessCode.event };
+    });
+
+    return NextResponse.json({ ok: true, kind: "access_code", label: result.label, event: result.event });
+  } catch (err) {
+    if (err instanceof CheckinError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    throw err;
+  }
+}
+
+class CheckinError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+  }
 }
