@@ -6,7 +6,6 @@ import { Field, TextareaField, SelectField } from "./ui/Field";
 import { RangeField } from "./ui/RangeField";
 import { Button } from "./ui/Button";
 import { getSocialHalfQuotaBps, isSocialHalfMandatory } from "@/lib/socialHalfQuota";
-import { isResaleCapMandatory, LEGAL_CAP_BPS } from "@/lib/resaleCap";
 
 export interface NewEventForm {
   title: string;
@@ -25,7 +24,6 @@ export interface NewEventForm {
   subcategory: string;
   lineup: string;
   doorsOpenAt: string;
-  maxResaleBps: string;
   reservedTickets: string;
   hasSocialHalf: boolean;
   socialHalfBps: string;
@@ -35,7 +33,7 @@ const EMPTY_FORM: NewEventForm = {
   title: "", description: "", venue: "", city: "", country: "BR", state: "",
   coverImageUrl: "", coverVideoUrl: "",
   eventDate: "", endDate: "", ticketPriceUsdc: "", maxTickets: "",
-  category: "OUTRO", subcategory: "", lineup: "", doorsOpenAt: "", maxResaleBps: "",
+  category: "OUTRO", subcategory: "", lineup: "", doorsOpenAt: "",
   reservedTickets: "", hasSocialHalf: false, socialHalfBps: "",
 };
 
@@ -53,19 +51,6 @@ const CATEGORY_OPTIONS = [
   { value: "ESPORTE", label: "Esporte" },
   { value: "CONFERENCIA", label: "Conferência" },
   { value: "OUTRO", label: "Outro" },
-];
-
-// PLANO_EVOLUCAO_V2.md §10.2/D36-D37 — 100% é o default de PRODUTO fora de
-// ESPORTE, não imposição legal; por isso o organizador pode ir abaixo (revenda
-// só com desconto) ou acima (com o aviso de exposição ao CDC). Em ESPORTE o
-// teto trava em 100% por conformidade — ver renderização condicional abaixo.
-const RESALE_CAP_OPTIONS = [
-  { value: "", label: "Sem limite (mercado livre)" },
-  { value: "5000", label: "Até 50% do preço original" },
-  { value: "8000", label: "Até 80% do preço original" },
-  { value: "10000", label: "Até 100% do preço original" },
-  { value: "15000", label: "Até 150% do preço original — risco CDC (sobrepreço)" },
-  { value: "20000", label: "Até 200% do preço original — risco CDC (sobrepreço)" },
 ];
 
 const STEPS = [
@@ -131,15 +116,14 @@ export function NewEventModal({
   const set = <K extends keyof NewEventForm>(key: K, value: NewEventForm[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
-  // PLANO_EVOLUCAO_V2.md §10.2-10.4/D36-D39 — trocar a categoria pode LIGAR
-  // conformidade obrigatória (teto de revenda em ESPORTE; piso de meia nas
-  // categorias cobertas). O servidor valida de qualquer jeito, mas forçar
+  // PLANO_EVOLUCAO_V2.md §10.3-10.4/D38-D39 — trocar a categoria pode LIGAR
+  // meia-entrada obrigatória. O servidor valida de qualquer jeito, mas forçar
   // aqui também evita o organizador digitar um valor que vai ser rejeitado.
+  // Teto de revenda não depende mais de categoria — é sempre 100% (§10.2/A14).
   const setCategory = (cat: string) =>
     setForm((f) => ({
       ...f,
       category: cat,
-      maxResaleBps: isResaleCapMandatory(cat) ? String(LEGAL_CAP_BPS) : f.maxResaleBps,
       hasSocialHalf: isSocialHalfMandatory(cat) ? true : f.hasSocialHalf,
     }));
 
@@ -160,7 +144,6 @@ export function NewEventModal({
         ...form,
         ticketPriceUsdc: parseFloat(form.ticketPriceUsdc),
         maxTickets: form.maxTickets ? parseInt(form.maxTickets) : null,
-        maxResaleBps: form.maxResaleBps ? parseInt(form.maxResaleBps) : null,
       }),
     });
     const d = await r.json();
@@ -258,24 +241,19 @@ export function NewEventModal({
               value={form.maxTickets}
               onChange={(e) => set("maxTickets", e.target.value)}
             />
-            {isResaleCapMandatory(form.category) ? (
-              <div className="sm:col-span-2 flex flex-col gap-1">
-                <span className="text-sm font-medium text-text">Teto de revenda</span>
-                <p className="text-sm text-text">
-                  Travado em 100% do preço original — Lei Geral do Esporte (14.597/2023), art. 166:
-                  vender ingresso de evento esportivo por preço superior ao estampado é crime.
-                </p>
-              </div>
-            ) : (
-              <SelectField
-                label="Teto de revenda"
-                className="sm:col-span-2"
-                value={form.maxResaleBps}
-                onChange={(e) => set("maxResaleBps", e.target.value)}
-              >
-                {RESALE_CAP_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </SelectField>
-            )}
+            {/* PLANO_EVOLUCAO_V2.md §10.2/A11-A14 — teto de revenda sempre
+                travado em 100% da face, em toda categoria; não é mais escolha
+                do organizador. Acima disso, a plataforma pode cobrar uma taxa
+                de intermediação destacada (até 20%, lib/resaleCap.ts), somada
+                por cima do valor pago ao comprador — nunca embutida aqui. */}
+            <div className="sm:col-span-2 flex flex-col gap-1">
+              <span className="text-sm font-medium text-text">Teto de revenda</span>
+              <p className="text-sm text-text">
+                Travado em 100% do preço original em qualquer categoria — o vendedor nunca recebe
+                acima da face. A plataforma pode cobrar uma taxa de intermediação por cima, mostrada
+                separadamente pro comprador no anúncio.
+              </p>
+            </div>
             {/* Lotes, áreas e ingresso por dia chegam com o modelo TicketType
                 (Onda 3) — hoje o evento tem um preço e uma capacidade só. */}
             {(() => {

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthUser, unauthorized, forbidden } from "@/lib/auth";
 import { geocodeAddress } from "@/lib/geocode";
-import { resolveMaxResaleBps } from "@/lib/resaleCap";
 import { isSocialHalfMandatory } from "@/lib/socialHalfQuota";
 
 export async function PATCH(
@@ -29,7 +28,7 @@ export async function PATCH(
   const allowed = [
     "title","description","venue","city","coverImageUrl","coverVideoUrl",
     "eventDate","endDate","ticketPriceUsdc","maxTickets",
-    "category","maxResaleBps","hasSocialHalf","socialHalfBps",
+    "category","hasSocialHalf","socialHalfBps",
   ];
   const data: Record<string, unknown> = {};
   for (const key of allowed) {
@@ -50,20 +49,8 @@ export async function PATCH(
     return NextResponse.json({ error: "endDate must be after eventDate" }, { status: 400 });
   }
 
-  // Teto de revenda — PLANO_EVOLUCAO_V2.md §10.2/D36-D37. Mudar a categoria
-  // para ESPORTE precisa re-normalizar o teto, mesmo que maxResaleBps não
-  // tenha vindo neste PATCH — por isso sempre roda quando category ou
-  // maxResaleBps mudam, usando o valor persistido do que não veio.
-  if ("category" in data || "maxResaleBps" in data) {
-    const nextCategory = (data.category ?? event.category) as string;
-    const requestedMaxResaleBps =
-      "maxResaleBps" in data
-        ? (data.maxResaleBps === null || data.maxResaleBps === "" ? null : Number(data.maxResaleBps))
-        : event.maxResaleBps;
-    const result = resolveMaxResaleBps(nextCategory, requestedMaxResaleBps);
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-    data.maxResaleBps = result.bps;
-  }
+  // Teto de revenda — PLANO_EVOLUCAO_V2.md §10.2/A11-A14. Sempre 100% da face,
+  // em toda categoria; não está mais em `allowed`, então nem entra no PATCH.
 
   // Meia-entrada — PLANO_EVOLUCAO_V2.md §10.3-10.4/D38-D39. Mesma lógica do
   // POST: categoria coberta força hasSocialHalf e piso de 40%, inclusive

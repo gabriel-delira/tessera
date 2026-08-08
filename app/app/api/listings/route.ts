@@ -60,8 +60,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Ticket cannot be listed in its current status" }, { status: 409 });
   }
 
-  // LAYOUT_UPDATE.md §5.5 — teto de revenda. Só para evento futuro; colecionável
-  // nunca tem teto. Base é Ticket.facePrice, nunca o preço atual do evento.
+  // LAYOUT_UPDATE.md §5.5, PLANO_EVOLUCAO_V2.md §10.2/A11 — teto de revenda,
+  // sempre 100% da face (lib/resaleCap.ts) em toda categoria. Só para evento
+  // futuro; colecionável nunca tem teto. Base é Ticket.facePrice, nunca o
+  // preço atual do evento. `priceUsdc` aqui é o pedido do vendedor — a taxa
+  // de intermediação da plataforma é somada por cima, não entra nesse teto.
   if (!isCollectible && ticket.event.maxResaleBps) {
     const cap = (Number(ticket.facePrice) * ticket.event.maxResaleBps) / 10000;
     if (priceUsdc > cap + 1e-9) {

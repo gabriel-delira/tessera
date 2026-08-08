@@ -24,11 +24,18 @@ export interface CollectionView {
 export function CollectionShelf({
   collection,
   onSelect,
+  hideEmptySlots,
 }: {
   collection: CollectionView;
   onSelect: (tokenId: number) => void;
+  // Lista mostra só o que o usuário já tem — os placeholders de "falta
+  // comprar" só fazem sentido no Álbum, onde a coleção é o produto em si.
+  hideEmptySlots?: boolean;
 }) {
   const filledCount = collection.slots.filter((s) => s.filled).length;
+  if (hideEmptySlots && filledCount === 0) return null;
+
+  const visibleSlots = hideEmptySlots ? collection.slots.filter((s) => s.filled) : collection.slots;
 
   return (
     <div>
@@ -37,7 +44,7 @@ export function CollectionShelf({
         <span className="text-xs text-text-muted">{filledCount} de {collection.slots.length}</span>
       </div>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        {collection.slots.map((s, i) =>
+        {visibleSlots.map((s, i) =>
           s.filled && s.tokenId !== null ? (
             <ShelfItem
               key={s.slotId}

@@ -266,7 +266,12 @@ export default function MyTicketsPage() {
           {collections.length > 0 && (
             <div className="mb-10 flex flex-col gap-10">
               {collections.map((c) => (
-                <CollectionShelf key={c.id} collection={c} onSelect={handleAlbumSelect} />
+                <CollectionShelf
+                  key={c.id}
+                  collection={c}
+                  onSelect={handleAlbumSelect}
+                  hideEmptySlots={view === "list"}
+                />
               ))}
             </div>
           )}

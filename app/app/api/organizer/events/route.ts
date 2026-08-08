@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
     ticketPriceUsdc, maxTickets,
     royaltyBps, royaltyOrgShareBps,
     category, subcategory, lineup, doorsOpenAt,
-    maxResaleBps, reservedTickets,
+    reservedTickets,
     hasSocialHalf, socialHalfBps,
   } = body;
 
@@ -172,17 +172,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Teto de revenda — PLANO_EVOLUCAO_V2.md §10.2/D36-D37. Categoria ESPORTE
-  // trava em 100% (conformidade — art.166 da Lei Geral do Esporte). Nas
-  // demais, 100% é default de PRODUTO: o organizador pode afrouxar (sumiu o
-  // piso de "nunca abaixo de 100%" — nada na lei impede exigir desconto).
-  const requestedMaxResaleBps =
-    maxResaleBps !== undefined && maxResaleBps !== null && maxResaleBps !== "" ? Number(maxResaleBps) : null;
-  const resaleCapResult = resolveMaxResaleBps(finalCategory, requestedMaxResaleBps);
-  if (!resaleCapResult.ok) {
-    return NextResponse.json({ error: resaleCapResult.error }, { status: 400 });
-  }
-  const finalMaxResaleBps = resaleCapResult.bps;
+  // Teto de revenda — PLANO_EVOLUCAO_V2.md §10.2/A11-A14. Sempre 100% da face,
+  // em toda categoria — não é mais escolha do organizador (body é ignorado).
+  const finalMaxResaleBps = resolveMaxResaleBps().bps;
 
   // Reserva do organizador — PLANO_EVOLUCAO_V2.md D19. Só faz sentido dentro
   // do teto do evento; sem maxTickets não há oferta pública pra reduzir.

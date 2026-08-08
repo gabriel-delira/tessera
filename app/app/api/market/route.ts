@@ -74,13 +74,12 @@ export async function GET(req: NextRequest) {
   const result = listings.map((l) => {
     const priceBrl = Math.round(Number(l.price) * fxRate * 100) / 100;
     const { platformFeeBps, royaltyBps, royaltyOrgShareBps, ...event } = l.ticket.event;
-    // "Você recebe" — PLANO_EVOLUCAO_V2.md §3.8: o vendedor não fica com o
-    // preço cheio, e o split é calculado aqui (não no cliente) pra usar
-    // sempre a mesma fórmula que o contrato via computeResaleSplit.
-    //
-    // §10.2/D37 — quando o vendedor não lucrou (preço ≤ face), a plataforma
-    // abre mão da própria taxa, senão ele nunca fecha nos 100% originais.
-    const effectivePlatformFeeBps = resaleFeeBps({ platformFeeBps }, Number(l.price), Number(l.ticket.facePrice));
+    // Split — PLANO_EVOLUCAO_V2.md §10.2/A11: `priceBrl` é o pedido do
+    // vendedor (sempre ≤ face, lib/resaleCap.ts), e a taxa da plataforma é
+    // somada por cima pra virar o total que o comprador paga — não é mais
+    // deduzida do vendedor. "Você recebe" (sellerShare) só desconta o
+    // royalty do organizador, nunca a taxa de intermediação.
+    const effectivePlatformFeeBps = resaleFeeBps({ platformFeeBps });
     const split = computeResaleSplit({ amount: priceBrl, platformFeeBps: effectivePlatformFeeBps, royaltyBps, royaltyOrgShareBps });
 
     return {
@@ -90,6 +89,7 @@ export async function GET(req: NextRequest) {
       sellerAddress:   l.sellerAddress,
       priceUsdc:       Number(l.price),
       priceBrl,
+      totalBrl:        split.buyerTotal, // o que o comprador de fato paga (pedido + taxa destacada)
       paymentToken:    l.paymentToken,
       expiresAt:       l.expiresAt,
       createdAt:       l.createdAt,
@@ -97,6 +97,7 @@ export async function GET(req: NextRequest) {
       attendedEvent:   l.ticket.checkin !== null, // "Você esteve lá" — §5.3
       sellerReceivesBrl:   split.sellerShare,
       organizerRoyaltyBrl: split.organizerRoyalty,
+      platformFeeBrl:      split.platformFee,    // taxa de intermediação, discriminada — nunca embutida no priceBrl
       platformTotalBrl:    split.platformTotal, // taxa da plataforma + parte dela no royalty
       sellerAchievements:  achievementsBySeller.get(l.sellerAddress)?.achieved ?? null,
       sellerAchievementsHash: achievementsBySeller.get(l.sellerAddress)?.hash ?? null,

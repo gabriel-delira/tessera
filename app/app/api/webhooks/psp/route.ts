@@ -91,12 +91,19 @@ export async function processPspPayment(chargeId: string): Promise<{ ok: boolean
           agreedPriceUsdc
         );
 
-        // Split — LAYOUT_UPDATE.md §5.7: no Fluxo Reais o dinheiro não passa
-        // pelo contrato, então o repasse acontece aqui, refletido no ledger.
-        // O atestado on-chain gravado no evento TicketSettled é o que permite
-        // ao organizador conferir esses mesmos números depois (§5.7.2).
+        // Split — LAYOUT_UPDATE.md §5.7, PLANO_EVOLUCAO_V2.md §10.2/A11: no
+        // Fluxo Reais o dinheiro não passa pelo contrato, então o repasse
+        // acontece aqui, refletido no ledger. `purchase.amountBrl` é o TOTAL
+        // que o comprador pagou via PIX (face + taxa de intermediação, já
+        // somada no checkout — api/listings/[id]/checkout/route.ts); o split
+        // precisa partir só da face (`amountUsdc`, nunca inflado pela taxa),
+        // senão computeResaleSplit soma a taxa de novo em cima do total e
+        // credita o vendedor a mais do que ele pediu. O atestado on-chain
+        // gravado no evento TicketSettled (agreedPriceUsdc, só a face) é o
+        // que permite ao organizador conferir esses números depois (§5.7.2).
+        const faceBrl = Math.round(Number(purchase.amountUsdc) * Number(purchase.fxRate) * 100) / 100;
         const split = computeResaleSplit({
-          amount:             Number(purchase.amountBrl),
+          amount:             faceBrl,
           platformFeeBps:     event.platformFeeBps,
           royaltyBps:         event.royaltyBps,
           royaltyOrgShareBps: event.royaltyOrgShareBps,

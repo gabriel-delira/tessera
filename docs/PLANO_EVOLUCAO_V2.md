@@ -665,6 +665,8 @@ reaproveitado) segue sendo o ponto de partida; nada aqui foi descartado, só adi
 | A11 | **Parecer jurídico:** taxa de serviço destacada por cima da face na revenda (espelhando a taxa de conveniência do primário) conta como "preço superior ao estampado" para o art. 166 da Lei Geral do Esporte? Em esporte o downside é criminal, então só com parecer. Nas demais categorias, é o que decide se o vendedor consegue fechar em 100% líquido sem a plataforma abrir mão da taxa. | §10.2 |
 | A12 | `CONFERENCIA` e `OUTRO` entram em "espetáculos artístico-culturais e esportivos" da Lei 12.933/2013? O texto cita "eventos educativos, esportivos, de lazer e de entretenimento", o que é largo o bastante para cobrir quase tudo. Definir com advogado antes de travar a UI. | §10.3 |
 | A13 | Custo de plataforma da cortesia (D40): o organizador paga quanto por ingresso bancado? Zero, taxa fixa, ou o `platformFeeBps` sobre a face? Sem isso, cortesia em massa vira mint gratuito ilimitado às nossas custas de gas. | §10.5 |
+| A14 | **Parecer jurídico:** D36 conclui que o teto de 100% é imposição legal só em ESPORTE (art. 166 da Lei Geral do Esporte), e que as demais categorias têm só exposição civil (CDC) — mas essa leitura não foi confirmada com advogado, e a suspeita interna é de que a lei valha para qualquer tipo de evento. Em 2026-08-08 o produto passou a travar o vendedor em 100% da face pra TODAS as categorias (não só o piso — também não há mais opção de pedir acima disso), e a cobrar a taxa da plataforma destacada por cima em vez de deduzida. Falta parecer confirmando se essa taxa destacada resiste a uma leitura do "total pago" como sobrepreço (ver **A11**, que motivou a decisão). | §10.2 |
+| A15 | Discriminar Valor do Ingresso / Taxa de Intermediação / Total na Nota Fiscal da revenda. Depende de o produto emitir NF-e pra transações de revenda, o que hoje não existe — é feature nova (provedor fiscal, CNPJ do organizador/plataforma, etc.), não um ajuste da NF atual. Reforça a defensabilidade jurídica de A11 (taxa verificável, não só destacada na tela). | §10.2 |
 | ~~A6~~ | ~~Meia-entrada com `TicketType`: cota/preço por tipo ou globais do evento?~~ — **fechado em 2026-08-04: por tipo.** Global abriria arbitragem: todo comprador de meia escolheria racionalmente o tipo mais caro disponível, e o organizador levaria um rombo de receita sem ter feito nada errado. `Event.hasSocialHalf`/cap migram para `TicketType`; `getSocialHalfQuotaBps` (UF→país→default) não muda, só passa a aplicar sobre `TicketType.maxTickets` em vez de `Event.maxTickets`. | Schema da Onda 3 |
 | ~~A7~~ | ~~Reserva do organizador (D19) com `TicketType`: por tipo ou global?~~ — **fechado em 2026-08-04: por tipo.** "Reservo 20 ingressos" sem dizer de qual área/lote não corresponde ao que o organizador quer dizer na prática. `reservedTickets`/`reservedTicketsAssigned` migram para `TicketType`, mesmo padrão `sold + inFlight` já usado no checkout. | Schema da Onda 3 |
 | ~~A8~~ | ~~`Event.ticketPriceUsdc` como "menor preço ativo": inclui tipo esgotado/vencido?~~ — **fechado em 2026-08-04: exclui.** Contar tipo esgotado ou com `salesEndAt` vencido anunciaria "a partir de R$ X" de um lote que não vende mais — propaganda enganosa, não só desatualização cosmética. Recalculado (`min(price)` sobre tipos com `soldTickets < maxTickets` e `salesEndAt` futuro ou nulo) a cada compra que esgota um tipo e por um job que varre `salesEndAt` vencidos — não é só um campo, é um serviço. | Schema da Onda 3 |
@@ -1011,21 +1013,39 @@ O caminho lícito é **mexer nas deduções, não no preço**:
 Com as duas, o vendedor a 100% recebe 100%. Sem nenhuma, ele recebe ~82% — e isso precisa estar
 **escrito na tela do anúncio**, não descoberto no extrato.
 
-> **Zona cinzenta que fica registrada e não vamos usar sem advogado:** cobrar do comprador uma
-> *taxa de serviço destacada* por cima da face, espelhando a taxa de conveniência que o mercado
-> primário já cobra. O argumento a favor é a simetria com o primário; o argumento contra é que o
-> art. 166 fala em "vender por preço superior ao estampado", e um juiz pode ler o total pago, não
-> a decomposição. Em esporte o downside é criminal — não vale o risco. Nas demais categorias é
-> defensável, mas só com parecer. Ver **A11**.
+> **Atualização em 2026-08-08 — decisão de produto tomada sem parecer confirmado.** A "zona
+> cinzenta" abaixo foi implementada: o vendedor pede sempre ≤ 100% da face (em toda categoria, não
+> só ESPORTE — suspeita interna, ainda sem parecer, é de que a lei valha pra qualquer evento; ver
+> **A14**), e a plataforma cobra uma taxa de intermediação **destacada por cima**, exibida como
+> linha própria no anúncio ("Valor do Ingresso" + "Taxa de Intermediação / Serviço" = "Valor Total
+> a Pagar"). Teto da taxa: **20%** (`MAX_RESALE_SERVICE_FEE_BPS`, `lib/resaleCap.ts`) — decisão de
+> bom-senso comercial, não de lei: uma taxa "destacada" de 100% pareceria disfarce de sobrepreço.
+> O risco jurídico original permanece registrado: um juiz pode ler o **total pago pelo comprador**,
+> não a decomposição, como "preço superior ao estampado" (art. 166). Time decidiu seguir mesmo
+> assim, ciente do risco, enquanto o parecer (A11) não sai.
+>
+> **Pendência técnica:** implementado de ponta a ponta no **Fluxo Reais** (PIX) —
+> `api/listings/[id]/checkout/route.ts` cobra a face + taxa via PIX, `api/webhooks/psp/route.ts`
+> credita o vendedor só pela face (menos royalty) no ledger, e o atestado on-chain
+> (`settleListedTicketOnChain`) segue gravando só a face, que é o valor real do ingresso. **Falta**
+> o **Fluxo Cripto** (comprador paga direto na carteira, `TicketResale.buyListedTicket` on-chain):
+> aí o preço cobrado é o que foi listado on-chain na criação do anúncio (`Listing.price`, ainda só a
+> face, sem a taxa), e o contrato deduz sua própria taxa desse valor pelo mecanismo antigo — ninguém
+> paga a taxa de intermediação nesse caminho hoje. Corrigir exige mudar o que é submetido on-chain
+> na criação do anúncio (`api/listings/route.ts`) e possivelmente o contrato — não feito ainda.
+>
+> **Futuro:** discriminar os mesmos valores (face / taxa / total) na Nota Fiscal, quando a emissão
+> fiscal existir — hoje o produto não emite NF-e, isso é uma feature nova, não uma alteração de uma
+> existente. Ver **A15**.
 
 **Arquivos.** `api/organizer/events/route.ts`, `api/organizer/events/[id]/route.ts`,
-`components/NewEventModal.tsx`, `api/listings/route.ts`, `api/negotiations/route.ts`,
-`api/negotiations/[id]/counter/route.ts`, `lib/split.ts`, `prisma/seed.ts` (os 150%/200% viram
-dados ilegais para esporte)
+`components/NewEventModal.tsx`, `api/listings/route.ts`, `api/market/route.ts`, `lib/split.ts`,
+`lib/resaleCap.ts`, `app/revenda/page.tsx`
 **Tamanho.** M
-**Riscos.** Eventos já criados com teto acima de 100% em categoria esportiva precisam de decisão de
+**Riscos.** Eventos já criados com teto acima de 100% em qualquer categoria precisam de decisão de
 migração: rebaixar para 10000 é o correto, mas invalida anúncios ativos acima disso. Como não há
-deploy em produção, o custo hoje é zero — mais uma decisão barata agora e cara depois.
+deploy em produção, o custo hoje é zero — mais uma decisão barata agora e cara depois. Contrato de
+resale não reflete a soma-por-cima ainda — ver pendência técnica acima.
 
 ### 10.3 Meia-entrada obrigatória por categoria (D38)
 

@@ -4,6 +4,7 @@ import { getAuthUser, unauthorized } from "@/lib/auth";
 import { lockRate, usdcToBrl } from "@/lib/fx";
 import { psp } from "@/lib/psp";
 import { lockListingOnChain, unlockListingOnChain } from "@/lib/onchain";
+import { resaleFeeBps } from "@/lib/resaleCap";
 import { randomUUID } from "crypto";
 
 // POST /api/listings/:id/checkout
@@ -83,8 +84,14 @@ export async function POST(
     priceUsdc = Number(listing.price);
   }
 
-  const fxRate    = await lockRate();
-  const amountBrl = Math.round(priceUsdc * fxRate * 100) / 100;
+  const fxRate = await lockRate();
+  // PLANO_EVOLUCAO_V2.md §10.2/A11 — o comprador paga a face MAIS a taxa de
+  // intermediação, somada por cima e nunca deduzida do vendedor (lib/split.ts).
+  // `amountUsdc`/`priceUsdc` guardam só a face (usada no atestado on-chain e
+  // no split do webhook); a cobrança PIX real é pelo total.
+  const feeBps    = resaleFeeBps(listing.ticket.event);
+  const totalUsdc = Math.round(priceUsdc * (1 + feeBps / 10_000) * 1e6) / 1e6;
+  const amountBrl = Math.round(totalUsdc * fxRate * 100) / 100;
   const externalRef = randomUUID();
 
   let charge;

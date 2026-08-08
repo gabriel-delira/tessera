@@ -23,12 +23,14 @@ interface MarketListing {
   sellerAddress: string;
   priceUsdc: number;
   priceBrl: number;
+  totalBrl: number; // o que o comprador de fato paga — priceBrl + platformFeeBrl
   expiresAt: string | null;
   createdAt: string;
   isCollectible: boolean;
   attendedEvent: boolean;
   sellerReceivesBrl: number;
   organizerRoyaltyBrl: number;
+  platformFeeBrl: number;
   platformTotalBrl: number;
   sellerAchievements: { id: string; icon: string; title: string }[] | null;
   sellerAchievementsHash: string | null;
@@ -334,23 +336,36 @@ function MarketPageInner() {
                 <> · Teto de revenda: {(details.ticket.event.maxResaleBps / 100).toFixed(0)}% do preço original</>
               )}
             </p>
+            {/* PLANO_EVOLUCAO_V2.md §10.2/A11 — taxa somada por cima do pedido
+                do vendedor, não mais deduzida dele. "Valor do Ingresso" é o
+                que o vendedor pediu (sempre ≤ face); "Taxa de Intermediação"
+                é discriminada à parte, e o total é o que o comprador paga. */}
             <div className="flex flex-col gap-1.5 rounded-md border border-border bg-surface-2 p-3 text-sm">
               <div className="flex items-center justify-between text-text-muted">
-                <span>Preço anunciado</span>
+                <span>Valor do Ingresso (valor de face)</span>
                 <span className="tabular-nums">R$ {details.priceBrl.toFixed(2)}</span>
               </div>
               <div className="flex items-center justify-between text-text-muted">
+                <span>Taxa de Intermediação / Serviço (plataforma)</span>
+                <span className="tabular-nums">+ R$ {details.platformFeeBrl.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between border-t border-border pt-1.5 text-text">
+                <span className="font-medium">Valor Total a Pagar (comprador)</span>
+                <span className="text-lg font-bold tabular-nums">R$ {details.totalBrl.toFixed(2)}</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between text-text-muted">
                 <span>Royalty do organizador</span>
                 <span className="tabular-nums">− R$ {details.organizerRoyaltyBrl.toFixed(2)}</span>
               </div>
-              <div className="flex items-center justify-between text-text-muted">
-                <span>Taxa da plataforma</span>
-                <span className="tabular-nums">− R$ {details.platformTotalBrl.toFixed(2)}</span>
-              </div>
-              <div className="mt-1 flex items-center justify-between border-t border-border pt-1.5 text-text">
+              <div className="flex items-center justify-between border-t border-border pt-1.5 text-text">
                 <span className="font-medium">Você recebe</span>
                 <span className="text-lg font-bold tabular-nums">R$ {details.sellerReceivesBrl.toFixed(2)}</span>
               </div>
+              <p className="mt-1 text-xs text-text-muted">
+                Essa quebra vale pra compra via PIX. Se o comprador pagar direto na carteira (fluxo
+                cripto), o contrato ainda cobra só o valor de face, sem a taxa de intermediação —
+                pendência técnica registrada em PLANO_EVOLUCAO_V2.md §10.2.
+              </p>
             </div>
 
             {/* Analytics — PLANO_EVOLUCAO_V2.md §4.2. Camada 1 (propostas) e

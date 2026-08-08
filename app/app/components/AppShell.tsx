@@ -13,7 +13,7 @@ const NAV_ITEMS: { href: string; label: string; roles?: Role[]; requiresAuth?: b
   { href: "/", label: "Eventos" },
   { href: "/revenda", label: "Revenda" },
   { href: "/my-tickets", label: "Minha Coleção", requiresAuth: true },
-  { href: "/organizer", label: "Organizador", roles: ["ORGANIZER", "ADMIN"] },
+  { href: "/organizer", label: "Organizador", roles: ["ORGANIZER"] },
   { href: "/admin", label: "Admin", roles: ["ADMIN"] },
   { href: "/checkin", label: "Check-in", roles: ["STAFF", "ADMIN"] },
 ];
@@ -49,14 +49,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // D28 (PLANO_EVOLUCAO_V2.md §9.1) — itens de conta só aparecem logado.
   // signedIn já exige `ready`, então o item nasce escondido em vez de
   // piscar (aparecer é menos violento que sumir debaixo do cursor).
-  // Onda 2 §4.5 — organizador não é comprador (hoje), então "Minha Coleção"
-  // some pra esse papel também. Exclusão pontual, não um allowlist de roles.
+  // "Minha Coleção" é só pra quem compra ingresso — organizador, staff e
+  // admin não são compradores (hoje), então some pra esses três papéis.
+  // Exclusão pontual, não um allowlist de roles.
   const signedIn = ready && authenticated;
   const visibleItems = NAV_ITEMS.filter(
     (item) =>
       (!item.requiresAuth || signedIn) &&
       (!item.roles || (role && item.roles.includes(role))) &&
-      !(item.href === "/my-tickets" && role === "ORGANIZER")
+      !(item.href === "/my-tickets" && (role === "ORGANIZER" || role === "STAFF" || role === "ADMIN"))
   );
   const isHome = pathname === "/";
 
@@ -131,10 +132,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
               <div className="flex flex-col gap-2">
                 <strong className="font-sans text-text">Conta</strong>
-                {signedIn && role !== "ORGANIZER" && (
+                {signedIn && role !== "ORGANIZER" && role !== "STAFF" && role !== "ADMIN" && (
                   <Link href="/my-tickets" className="text-text-muted hover:text-text">Minha Coleção</Link>
                 )}
-                <Link href="/organizer" className="text-text-muted hover:text-text">Organizador</Link>
+                {role !== "STAFF" && role !== "ADMIN" && (
+                  <Link href="/organizer" className="text-text-muted hover:text-text">Organizador</Link>
+                )}
               </div>
             </div>
           </div>
