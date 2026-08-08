@@ -12,8 +12,9 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { BalanceCard } from "../components/ui/BalanceCard";
 import { Field } from "../components/ui/Field";
 import { ViewToggle } from "../components/ui/ViewToggle";
-import { AlbumGrid } from "../components/ui/AlbumGrid";
-import type { CollectionView } from "../components/ui/CollectionShelf";
+import { AlbumBook } from "../components/ui/AlbumBook";
+import { CollectionShelf, type CollectionView } from "../components/ui/CollectionShelf";
+import { AchievementBadge } from "../components/ui/AchievementBadge";
 import { ListTicketModal } from "../components/ListTicketModal";
 import type { Achievement } from "@/lib/achievements";
 
@@ -102,11 +103,17 @@ function isListable(t: TicketWithEvent): boolean {
   return isPast ? (t.status === "VALID" || t.status === "CHECKED_IN") : t.status === "VALID";
 }
 
+// §9.4.4/D31 — lista mostra só "Próximos"; o que já aconteceu vive no álbum.
+function isUpcoming(t: TicketWithEvent): boolean {
+  return new Date(t.event.eventDate).getTime() >= Date.now();
+}
+
 export default function MyTicketsPage() {
   const { ready, authenticated, login, getAccessToken } = useAuth();
   const [tickets, setTickets] = useState<TicketWithEvent[]>([]);
   const [loading, setLoading]   = useState(true);
   const [selected, setSelected] = useState<number | null>(null);
+  const [figurineDetail, setFigurineDetail] = useState<TicketWithEvent | null>(null);
   const [balance, setBalance] = useState(0);
   const [ledger, setLedger] = useState<LedgerEntryView[]>([]);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
@@ -193,6 +200,18 @@ export default function MyTicketsPage() {
 
   const selectedTicket = tickets.find((t) => t.tokenId === selected) ?? null;
 
+  // Clicar numa figurinha de evento passado abre o detalhe (§9.4.4) em vez
+  // de QR, que só faz sentido pra ingresso que ainda vai ser usado.
+  const upcomingTickets = tickets.filter(isUpcoming);
+  const pastTicketsCount = tickets.length - upcomingTickets.length;
+
+  const handleAlbumSelect = (tokenId: number) => {
+    const t = tickets.find((x) => x.tokenId === tokenId);
+    if (!t) return;
+    if (isUpcoming(t) && t.status === "VALID") { setSelected(tokenId); return; }
+    setFigurineDetail(t);
+  };
+
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
       <PageTitle>Minha Coleção</PageTitle>
@@ -232,53 +251,80 @@ export default function MyTicketsPage() {
         />
       ) : (
         <>
+          {achievements.length > 0 && (
+            <div className="mb-10">
+              <h3 className="mb-3 font-display text-lg text-text">Conquistas</h3>
+              <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
+                {achievements.map((a) => <AchievementBadge key={a.id} achievement={a} />)}
+              </div>
+            </div>
+          )}
+
+          {collections.length > 0 && (
+            <div className="mb-10 flex flex-col gap-10">
+              {collections.map((c) => (
+                <CollectionShelf key={c.id} collection={c} onSelect={handleAlbumSelect} />
+              ))}
+            </div>
+          )}
+
           <ViewToggle value={view} onChange={changeView} />
 
           {view === "list" ? (
             <div className="flex flex-col gap-4">
-              {tickets.map((t, i) => {
-                const badge = statusBadge[t.status] ?? { label: t.status, variant: "neutral" as const };
-                const frozen = t.status !== "VALID" && t.status !== "CHECKED_IN";
-                return (
-                  <TicketRow
-                    key={t.tokenId}
-                    thumbGrad={i}
-                    frozen={frozen}
-                    title={t.event.title}
-                    subtitle={`${new Date(t.event.eventDate).toLocaleString("pt-BR")} · ${t.event.venue}, ${t.event.city} · Ingresso #${t.ticketNumber}${t.seat ? ` · Assento ${t.seat}` : ""}`}
-                    badge={<Badge variant={badge.variant}>{badge.label}</Badge>}
-                    actions={
-                      t.status === "VALID" || isListable(t) ? (
-                        <>
-                          {t.status === "VALID" && (
-                            <Button size="sm" onClick={() => setSelected(t.tokenId)}>Ver QR</Button>
-                          )}
-                          {isListable(t) && (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => { setListTokenId(t.tokenId); setListModalOpen(true); }}
-                            >
-                              Anunciar
-                            </Button>
-                          )}
-                        </>
-                      ) : undefined
-                    }
-                  />
-                );
-              })}
+              <h3 className="-mb-1 font-display text-lg text-text">Próximos ingressos</h3>
+              {upcomingTickets.length === 0 ? (
+                <p className="text-sm text-text-muted">Nenhum ingresso de evento futuro.</p>
+              ) : (
+                upcomingTickets.map((t, i) => {
+                  const badge = statusBadge[t.status] ?? { label: t.status, variant: "neutral" as const };
+                  const frozen = t.status !== "VALID" && t.status !== "CHECKED_IN";
+                  return (
+                    <TicketRow
+                      key={t.tokenId}
+                      thumbGrad={i}
+                      frozen={frozen}
+                      title={t.event.title}
+                      subtitle={`${new Date(t.event.eventDate).toLocaleString("pt-BR")} · ${t.event.venue}, ${t.event.city} · Ingresso #${t.ticketNumber}${t.seat ? ` · Assento ${t.seat}` : ""}`}
+                      badge={<Badge variant={badge.variant}>{badge.label}</Badge>}
+                      actions={
+                        t.status === "VALID" || isListable(t) ? (
+                          <>
+                            {t.status === "VALID" && (
+                              <Button size="sm" onClick={() => setSelected(t.tokenId)}>Ver QR</Button>
+                            )}
+                            {isListable(t) && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => { setListTokenId(t.tokenId); setListModalOpen(true); }}
+                              >
+                                Anunciar
+                              </Button>
+                            )}
+                          </>
+                        ) : undefined
+                      }
+                    />
+                  );
+                })
+              )}
+              {pastTicketsCount > 0 && (
+                <button
+                  onClick={() => changeView("album")}
+                  className="mt-2 text-left text-xs text-text-muted underline"
+                >
+                  Seus ingressos de eventos que já aconteceram estão no álbum.
+                </button>
+              )}
             </div>
           ) : (
-            <AlbumGrid
-              achievements={achievements}
+            <AlbumBook
               collections={collections}
-              onSelect={(tokenId) => {
-                const t = tickets.find((x) => x.tokenId === tokenId);
-                if (t?.status === "VALID") setSelected(tokenId); // QR só faz sentido para ingresso válido
-              }}
+              onSelect={handleAlbumSelect}
               tickets={tickets.map((t) => ({
                 tokenId: t.tokenId,
+                eventId: t.event.id,
                 status: t.status,
                 eventTitle: t.event.title,
                 eventDate: t.event.eventDate,
@@ -295,6 +341,37 @@ export default function MyTicketsPage() {
       <Modal open={!!selectedTicket} onClose={() => setSelected(null)} title={selectedTicket?.event.title}>
         {selectedTicket && (
           <RotatingQR tokenId={selectedTicket.tokenId} getAccessToken={getAccessToken} />
+        )}
+      </Modal>
+
+      {/* Detalhe de figurinha do álbum — §9.4.4. Clicar num ingresso passado
+          não fazia nada antes (o onSelect só abria QR pra VALID); agora abre
+          isso, com "Anunciar" quando elegível. */}
+      <Modal open={!!figurineDetail} onClose={() => setFigurineDetail(null)} title={figurineDetail?.event.title}>
+        {figurineDetail && (
+          <div className="flex flex-col gap-4">
+            <div
+              className="h-48 w-full rounded-lg bg-cover bg-center"
+              style={{
+                backgroundImage: `url(${figurineDetail.event.coverImageUrl ?? `/api/tickets/${figurineDetail.tokenId}/art.svg`})`,
+              }}
+            />
+            <p className="text-sm text-text-muted">
+              {new Date(figurineDetail.event.eventDate).toLocaleDateString("pt-BR")} · {figurineDetail.event.venue}, {figurineDetail.event.city} · Ingresso #{figurineDetail.ticketNumber}
+            </p>
+            {figurineDetail.attended && <Badge variant="info">Você esteve lá</Badge>}
+            {isListable(figurineDetail) && (
+              <Button
+                onClick={() => {
+                  setListTokenId(figurineDetail.tokenId);
+                  setListModalOpen(true);
+                  setFigurineDetail(null);
+                }}
+              >
+                Anunciar
+              </Button>
+            )}
+          </div>
         )}
       </Modal>
 

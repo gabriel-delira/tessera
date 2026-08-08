@@ -17,20 +17,58 @@ async function getTreasuryClient() {
 
 // ── createEvent ───────────────────────────────────────────────────────────────
 
+// PLANO_EVOLUCAO_V2.md §5.1/§5.2 — A1 opção (a): um evento on-chain agrupa N tipos
+// de ingresso (área × dia × lote), criados na mesma transação do evento. O chamador
+// (approve route) monta `types` a partir de `Event.ticketTypes`; sem tipos passados,
+// `createEventOnChain` cria um tipo único a partir de `Event.ticketPriceUsdc` —
+// usado só por chamadores que ainda não migraram (não deveria sobrar nenhum).
+export interface TicketTypeInput {
+  priceUsdc: number;
+  /** Cota própria do tipo. 0/null = sem cota; quem limita é o teto do evento. */
+  maxTickets?: number | null;
+  /** Fim do lote por data. null = sem prazo próprio. */
+  salesEndAt?: Date | null;
+  /** "Pista — Dia 1 — Lote 2"; vira o `seat` do NFT. */
+  label?: string;
+}
+
+interface OnchainTicketType {
+  price: bigint;
+  maxTickets: bigint;
+  salesEndAt: bigint;
+  label: string;
+}
+
+function toOnchainTicketType(t: TicketTypeInput): OnchainTicketType {
+  return {
+    price:      BigInt(Math.round(t.priceUsdc * 1_000_000)),
+    maxTickets: BigInt(t.maxTickets ?? 0),
+    salesEndAt: t.salesEndAt ? BigInt(Math.floor(t.salesEndAt.getTime() / 1000)) : BigInt(0),
+    label:      t.label ?? "",
+  };
+}
+
 export interface CreateEventResult {
   txHash: `0x${string}`;
   onchainEventId: number;
   royaltySplitterAddr: string;
+  /** Ids dos tipos criados, na ordem em que foram passados. */
+  ticketTypeIds: number[];
 }
 
 export async function createEventOnChain(
-  event: PrismaEvent & { organizer: Organizer }
+  event: PrismaEvent & { organizer: Organizer },
+  types?: TicketTypeInput[]
 ): Promise<CreateEventResult> {
   const { sale, usdc } = getAddresses();
   const client = await getOwnerClient();
 
-  const ticketPriceUsdc = BigInt(Math.round(Number(event.ticketPriceUsdc) * 1_000_000));
-  const eventTimestamp  = BigInt(Math.floor(event.eventDate.getTime() / 1000));
+  const eventTimestamp = BigInt(Math.floor(event.eventDate.getTime() / 1000));
+
+  // Sem tipos explícitos: um tipo único sem cota própria — o teto do evento é quem
+  // limita, exatamente como antes de existir `TicketType`.
+  const typeInputs = (types?.length ? types : [{ priceUsdc: Number(event.ticketPriceUsdc) }])
+    .map(toOnchainTicketType);
 
   const txHash = await client.writeContract({
     address: sale,
@@ -38,15 +76,14 @@ export async function createEventOnChain(
     functionName: "createEvent",
     args: [
       event.organizer.payoutWallet as `0x${string}`,
-      ticketPriceUsdc,
       usdc,
       BigInt(event.platformFeeBps),
       BigInt(event.maxTickets ?? 0),
       event.title,
       eventTimestamp,
-      "",
       BigInt(event.royaltyBps),       // uint96
       BigInt(event.royaltyOrgShareBps),
+      typeInputs,
     ],
   });
 
@@ -61,8 +98,49 @@ export async function createEventOnChain(
 
   if (!logs.length) throw new Error("EventCreated log not found in receipt");
 
+  const typeLogs = parseEventLogs({
+    abi: TICKET_SALE_ABI,
+    eventName: "TicketTypeAdded",
+    logs: receipt.logs,
+  });
+
   const { eventId, royaltySplitter } = logs[0].args;
-  return { txHash, onchainEventId: Number(eventId), royaltySplitterAddr: royaltySplitter as string };
+  return {
+    txHash,
+    onchainEventId:      Number(eventId),
+    royaltySplitterAddr: royaltySplitter as string,
+    ticketTypeIds:       typeLogs.map((l) => Number(l.args.typeId)),
+  };
+}
+
+// ── addTicketType ─────────────────────────────────────────────────────────────
+
+/// Abre um lote novo ou libera uma área extra num evento já criado.
+export async function addTicketTypeOnChain(
+  onchainEventId: number,
+  type: TicketTypeInput
+): Promise<{ txHash: `0x${string}`; typeId: number }> {
+  const { sale } = getAddresses();
+  const client = await getOwnerClient();
+
+  const txHash = await client.writeContract({
+    address: sale,
+    abi: TICKET_SALE_ABI,
+    functionName: "addTicketType",
+    args: [BigInt(onchainEventId), toOnchainTicketType(type)],
+  });
+
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+  if (receipt.status !== "success") throw new Error("addTicketType tx reverted");
+
+  const logs = parseEventLogs({
+    abi: TICKET_SALE_ABI,
+    eventName: "TicketTypeAdded",
+    logs: receipt.logs,
+  });
+  if (!logs.length) throw new Error("TicketTypeAdded log not found in receipt");
+
+  return { txHash, typeId: Number(logs[0].args.typeId) };
 }
 
 // ── buyTicketFor ──────────────────────────────────────────────────────────────
@@ -74,6 +152,7 @@ export interface BuyTicketResult {
 
 export async function buyTicketOnChain(
   onchainEventId: number,
+  onchainTicketTypeId: number,
   recipientWallet: `0x${string}`
 ): Promise<BuyTicketResult> {
   const { sale } = getAddresses();
@@ -83,7 +162,7 @@ export async function buyTicketOnChain(
     address: sale,
     abi: TICKET_SALE_ABI,
     functionName: "buyTicketFor",
-    args: [BigInt(onchainEventId), recipientWallet],
+    args: [BigInt(onchainEventId), BigInt(onchainTicketTypeId), recipientWallet],
   });
 
   const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });

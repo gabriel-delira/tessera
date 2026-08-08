@@ -162,6 +162,7 @@ export function EventsMapModal({ open, onClose }: { open: boolean; onClose: () =
                         priceLabel="A partir de"
                         price={`R$ ${e.priceBrl.toFixed(2).replace(".", ",")}`}
                         cta={soldOut ? "Ver revenda" : "Comprar"}
+                        ctaHref={soldOut ? `/revenda?tab=tickets&event=${e.id}` : undefined}
                       />
                     </Popup>
                   </Marker>

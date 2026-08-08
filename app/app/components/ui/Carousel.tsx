@@ -17,6 +17,9 @@ export interface CarouselSlide {
   title: string;
   meta: string[];
   ctaLabel: string;
+  /** PLANO_EVOLUCAO_V2.md §9.2/D29 — quando presente (evento esgotado), o
+   * CTA vira link próprio para a Revenda em vez de herdar o destino do slide. */
+  ctaHref?: string;
   priceLabel: string;
   price: string;
 }
@@ -104,17 +107,17 @@ export function Carousel({ slides }: { slides: CarouselSlide[] }) {
           }}
         >
           {slides.map((s, i) => (
-            <Link
+            <div
               key={s.href + i}
-              href={s.href}
               className="relative flex h-[320px] w-full shrink-0 snap-start items-end overflow-hidden p-8 text-text"
               style={{ background: s.coverVideoUrl || s.coverImageUrl ? undefined : s.grad }}
             >
+              <Link href={s.href} aria-label={s.title} className="absolute inset-0 z-0" />
               {s.coverVideoUrl ? (
                 <video
                   src={s.coverVideoUrl}
                   poster={s.coverImageUrl ?? undefined}
-                  className="absolute inset-0 h-full w-full object-cover"
+                  className="pointer-events-none absolute inset-0 h-full w-full object-cover"
                   autoPlay
                   muted
                   loop
@@ -125,23 +128,23 @@ export function Carousel({ slides }: { slides: CarouselSlide[] }) {
                 <img
                   src={s.coverImageUrl}
                   alt=""
-                  className="absolute inset-0 h-full w-full object-cover"
+                  className="pointer-events-none absolute inset-0 h-full w-full object-cover"
                   aria-hidden="true"
                 />
               ) : (
-                <Icon name={s.icon} className="absolute right-6 top-6 h-28 w-28 text-luz-500 opacity-15" />
+                <Icon name={s.icon} className="pointer-events-none absolute right-6 top-6 h-28 w-28 text-luz-500 opacity-15" />
               )}
               {(s.coverVideoUrl || s.coverImageUrl) && (
                 <span
                   aria-hidden
-                  className="absolute inset-0"
+                  className="pointer-events-none absolute inset-0"
                   style={{ background: "linear-gradient(to top, rgba(12,19,36,.92), rgba(12,19,36,.35) 55%, transparent 85%)" }}
                 />
               )}
-              <span className="absolute left-6 top-6 rounded-md bg-noite-900/60 px-2.5 py-1 text-xs font-semibold text-luz-500">
+              <span className="pointer-events-none absolute left-6 top-6 rounded-md bg-noite-900/60 px-2.5 py-1 text-xs font-semibold text-luz-500">
                 #{s.rank}
               </span>
-              <div className="relative z-10 flex flex-col gap-2">
+              <div className="pointer-events-none relative z-10 flex flex-col gap-2">
                 <span className="inline-flex w-fit items-center gap-1.5 rounded-sm bg-noite-900/50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-luz-500">
                   <Icon name="quadrifolio" />
                   {s.tag}
@@ -151,16 +154,25 @@ export function Carousel({ slides }: { slides: CarouselSlide[] }) {
                   {s.meta.map((m, j) => <span key={j}>{m}</span>)}
                 </div>
                 <div className="mt-2 flex items-center gap-4">
-                  <span className="inline-flex h-11 items-center justify-center rounded-md bg-laranja-500 px-6 text-[15px] font-semibold text-noite-800">
-                    {s.ctaLabel}
-                  </span>
+                  {s.ctaHref ? (
+                    <Link
+                      href={s.ctaHref}
+                      className="pointer-events-auto relative z-10 inline-flex h-11 items-center justify-center rounded-md bg-laranja-500 px-6 text-[15px] font-semibold text-noite-800 hover:bg-laranja-400"
+                    >
+                      {s.ctaLabel}
+                    </Link>
+                  ) : (
+                    <span className="inline-flex h-11 items-center justify-center rounded-md bg-laranja-500 px-6 text-[15px] font-semibold text-noite-800">
+                      {s.ctaLabel}
+                    </span>
+                  )}
                   <div className="leading-tight text-luz-500">
                     <small className="block text-[11px] opacity-80">{s.priceLabel}</small>
                     <span className="text-lg font-bold tabular-nums">{s.price}</span>
                   </div>
                 </div>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
       </div>

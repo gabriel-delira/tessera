@@ -44,8 +44,8 @@ async function syncTicketSale(saleAddress: `0x${string}`) {
   });
 
   for (const log of logs) {
-    const { eventId, buyer, tokenId } = (log as unknown as { args: {
-      eventId: bigint; buyer: string; tokenId: bigint; amount: bigint;
+    const { eventId, buyer, tokenId, typeId, amount } = (log as unknown as { args: {
+      eventId: bigint; buyer: string; tokenId: bigint; typeId: bigint; amount: bigint;
     } }).args;
     // Upsert the event's soldTickets cache (best-effort; source of truth is chain)
     await prisma.event.updateMany({
@@ -59,13 +59,24 @@ async function syncTicketSale(saleAddress: `0x${string}`) {
       if (event) {
         // Authoritative, race-free ticket number from on-chain mint data.
         const ticketNumber = await getOnchainTicketNumber(Number(tokenId));
+        // Casa o typeId do log com a linha do Postgres — mesma ligação que o
+        // webhook faz via Purchase.ticketType, só que a partir do log direto
+        // (esta é a rede de segurança para quando o webhook não rodou).
+        const ticketType = await prisma.ticketType.findFirst({
+          where: { eventId: event.id, onchainTypeId: Number(typeId) },
+        });
         await prisma.ticket.create({
           data: {
             tokenId:      Number(tokenId),
             eventId:      event.id,
+            ticketTypeId: ticketType?.id,
             ownerAddress: buyer,
             ticketNumber,
-            facePrice:    event.ticketPriceUsdc,
+            // Preço do tipo comprado, lido do próprio log — com múltiplos TicketType
+            // (§5.2) o preço do Event é só a denormalização do menor ("a partir de"),
+            // e usá-lo aqui gravaria o facePrice errado, que é a âncora do teto de
+            // revenda (D26).
+            facePrice:    Number(amount) / 1_000_000,
             status:       "VALID",
             mintTxHash:   (log as unknown as { transactionHash: string }).transactionHash,
             mintedAt:     new Date(),

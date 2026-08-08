@@ -164,7 +164,12 @@ export default function EventDetailPage() {
                 </div>
                 <p className="text-xs text-text-muted">Taxa de serviço {feePercent}% inclusa</p>
                 {soldOut ? (
-                  <Badge variant="error">Esgotado</Badge>
+                  <div className="flex flex-col gap-3">
+                    <Badge variant="error">Esgotado</Badge>
+                    <Link href={`/revenda?tab=tickets&event=${event.id}`}>
+                      <Button variant="secondary" className="w-full">Ver na revenda</Button>
+                    </Link>
+                  </div>
                 ) : (
                   <>
                     {authenticated && (

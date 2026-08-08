@@ -10,6 +10,7 @@ import { computeAchievements, hashAchievements } from "@/lib/achievements";
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const tab = searchParams.get("tab") === "collectibles" ? "collectibles" : "tickets";
+  const eventId = searchParams.get("event");
   const now = new Date();
 
   const listings = await prisma.listing.findMany({
@@ -17,7 +18,11 @@ export async function GET(req: NextRequest) {
       status:           "ACTIVE",
       onchainListingId: { not: null },
       ticket: {
-        event: tab === "collectibles" ? { eventDate: { lt: now } } : { eventDate: { gte: now } },
+        event: {
+          ...(tab === "collectibles" ? { eventDate: { lt: now } } : { eventDate: { gte: now } }),
+          // §9.2/D29 — deep link do card "Ver revenda" de um evento esgotado.
+          ...(eventId ? { id: eventId } : {}),
+        },
       },
     },
     include: {
