@@ -17,13 +17,24 @@ export async function POST(
 
   const { id: eventId } = await params;
 
-  const event = await prisma.event.findUnique({ where: { id: eventId } });
+  const event = await prisma.event.findUnique({
+    where:   { id: eventId },
+    // PLANO_EVOLUCAO_V2.md §5.1 — nesta fatia todo evento tem exatamente um
+    // TicketType (criado junto do evento em POST /api/organizer/events); o
+    // checkout compra sempre esse. Quando a UI de matriz existir, o tipo passa
+    // a vir do corpo da requisição em vez de ser resolvido aqui.
+    include: { ticketTypes: { orderBy: { createdAt: "asc" }, take: 1 } },
+  });
   if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
   if (event.status !== "ON_SALE") {
     return NextResponse.json({ error: "Event is not on sale" }, { status: 409 });
   }
   if (event.onchainEventId === null) {
     return NextResponse.json({ error: "Event not deployed on-chain yet" }, { status: 409 });
+  }
+  const ticketType = event.ticketTypes[0];
+  if (!ticketType || ticketType.onchainTypeId === null) {
+    return NextResponse.json({ error: "Event ticket type not deployed on-chain yet" }, { status: 409 });
   }
 
   const body = await req.json().catch(() => ({}));
@@ -132,7 +143,7 @@ export async function POST(
   // a taxa aqui faria a tesouraria adiantar o resto sem nunca reaver. O "só
   // paga a taxa" da reserva acontece em termos líquidos: o organizador recebe
   // de volta a própria parte quando sacar o payout do evento.
-  const priceUsdc = isHalfPrice ? Number(event.ticketPriceUsdc) / 2 : Number(event.ticketPriceUsdc);
+  const priceUsdc = isHalfPrice ? Number(ticketType.priceUsdc) / 2 : Number(ticketType.priceUsdc);
   const fxRate    = await lockRate();
   const amountBrl = Math.round(priceUsdc * fxRate * 100) / 100;
 
@@ -146,6 +157,7 @@ export async function POST(
         userId:        user.id,
         recipientUserId,
         eventId,
+        ticketTypeId:  ticketType.id,
         amountBrl,
         amountUsdc:    priceUsdc,
         fxRate,

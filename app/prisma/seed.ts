@@ -380,6 +380,20 @@ async function main() {
       update: data,
     });
     createdEvents[e.id] = created;
+
+    // PLANO_EVOLUCAO_V2.md §5.1 — mesmo TicketType único que POST /api/organizer/events
+    // cria em produção, espelhando ticketPriceUsdc/maxTickets do fixture.
+    await prisma.ticketType.upsert({
+      where: { id: `tt_${e.id}` },
+      create: {
+        id:        `tt_${e.id}`,
+        eventId:   e.id,
+        label:     "Inteira",
+        priceUsdc: e.ticketPriceUsdc,
+        quantity:  e.maxTickets,
+      },
+      update: { priceUsdc: e.ticketPriceUsdc, quantity: e.maxTickets },
+    });
   }
 
   // ── Ingressos + check-ins ────────────────────────────────────────────────
