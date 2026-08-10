@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getAuthUser, unauthorized } from "@/lib/auth";
+import { getAuthUser, unauthorized, blockedResponse } from "@/lib/auth";
 import { lockRate } from "@/lib/fx";
 import { psp } from "@/lib/psp";
 import { resolveGiftRecipient } from "@/lib/giftRecipient";
 import { socialHalfCap } from "@/lib/socialHalfQuota";
 import { hardCapAvailability, loadCapacityUsage, publicAvailability } from "@/lib/availability";
+import { resolveActiveTicketType } from "@/lib/ticketMatrix";
 import { randomUUID } from "crypto";
 
 export async function POST(
@@ -14,16 +15,17 @@ export async function POST(
 ) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
+  if (user.blocked) return blockedResponse();
 
   const { id: eventId } = await params;
 
   const event = await prisma.event.findUnique({
     where:   { id: eventId },
-    // PLANO_EVOLUCAO_V2.md §5.1 — nesta fatia todo evento tem exatamente um
-    // TicketType (criado junto do evento em POST /api/organizer/events); o
-    // checkout compra sempre esse. Quando a UI de matriz existir, o tipo passa
-    // a vir do corpo da requisição em vez de ser resolvido aqui.
-    include: { ticketTypes: { orderBy: { createdAt: "asc" }, take: 1 } },
+    // Matriz de ingressos — 2026-08-08. O evento pode ter mais de um
+    // TicketType (dia × área × lote); o comprador escolhe dia/área no body,
+    // e o lote é resolvido aqui (lib/ticketMatrix.ts) — nunca escolhido
+    // diretamente, troca sozinho por cota/data.
+    include: { ticketTypes: true },
   });
   if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
   if (event.status !== "ON_SALE") {
@@ -32,16 +34,28 @@ export async function POST(
   if (event.onchainEventId === null) {
     return NextResponse.json({ error: "Event not deployed on-chain yet" }, { status: 409 });
   }
-  const ticketType = event.ticketTypes[0];
-  if (!ticketType || ticketType.onchainTypeId === null) {
-    return NextResponse.json({ error: "Event ticket type not deployed on-chain yet" }, { status: 409 });
-  }
 
   const body = await req.json().catch(() => ({}));
   const method: string = body.method ?? "PIX";
   const giftRecipient: string | undefined = body.giftRecipient || undefined;
   const useReservedAllocation: boolean = body.useReservedAllocation === true;
   const isHalfPrice: boolean = body.isHalfPrice === true;
+  // Conjunto de dias do grupo escolhido (passe = mais de um). `dayId`
+  // singular ainda é aceito pra não quebrar cliente antigo — vira [dayId].
+  const dayIds: string[] = Array.isArray(body.dayIds)
+    ? body.dayIds.filter((d: unknown): d is string => typeof d === "string" && !!d)
+    : body.dayId
+    ? [body.dayId]
+    : [];
+  const areaId: string | null = body.areaId ?? null;
+
+  const ticketType = await resolveActiveTicketType(eventId, dayIds, areaId, event.ticketTypes);
+  if (!ticketType) {
+    return NextResponse.json({ error: "No active ticket type for this day/area — sold out or not on sale" }, { status: 409 });
+  }
+  if (ticketType.onchainTypeId === null) {
+    return NextResponse.json({ error: "Event ticket type not deployed on-chain yet" }, { status: 409 });
+  }
 
   // Meia-entrada — PLANO_EVOLUCAO_V2.md D24. Só existe se o organizador optou
   // (hasSocialHalf); nominal e sem upload de comprovante nesta fatia — a
@@ -117,6 +131,27 @@ export async function POST(
       if (publicLeft !== null && publicLeft <= 0) {
         return NextResponse.json({ error: "Event is sold out" }, { status: 409 });
       }
+    }
+  }
+
+  // Limite por conta — 2026-08-08. Conta ingressos EMITIDOS (owner = wallet
+  // do comprador) + compras em andamento dele mesmo, no evento inteiro (soma
+  // todos os tipos/dias/áreas — "5 por conta" não é "5 por dia"). Presente
+  // (giftRecipient) não escapa do limite: o limite é de quem está pagando,
+  // não de quem recebe o NFT, senão bastaria presentear pra si mesmo N vezes.
+  // Alocação reservada do organizador fica de fora — não é "compra".
+  if (event.maxTicketsPerAccount !== null && !useReservedAllocation && user.walletAddress) {
+    const [ownedByWallet, inFlightByUser] = await Promise.all([
+      prisma.ticket.count({ where: { eventId, ownerAddress: user.walletAddress } }),
+      prisma.purchase.count({
+        where: { eventId, userId: user.id, listingId: null, status: { in: ["PENDING", "PAID", "MINTING"] } },
+      }),
+    ]);
+    if (ownedByWallet + inFlightByUser >= event.maxTicketsPerAccount) {
+      return NextResponse.json(
+        { error: `Limite de ${event.maxTicketsPerAccount} ingresso(s) por conta para este evento` },
+        { status: 409 }
+      );
     }
   }
 

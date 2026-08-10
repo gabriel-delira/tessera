@@ -138,6 +138,15 @@ model User {
   pixKey         String?      @map("pix_key")
   pixKeyUpdatedAt DateTime?   @map("pix_key_updated_at")
 
+  // Moderação — admin pode bloquear um usuário sem apagar histórico.
+  // Bloqueado não pode iniciar compra primária, comprar em revenda, nem
+  // criar anúncio (checado em cada endpoint de escrita, lib/auth.ts
+  // blockedResponse); login e visualização dos ingressos já possuídos
+  // continuam funcionando.
+  blocked        Boolean   @default(false)
+  blockedAt      DateTime? @map("blocked_at")
+  blockedReason  String?   @map("blocked_reason")
+
   organizer     Organizer?
   purchases     Purchase[]
   // PLANO_EVOLUCAO_V2.md D18 — compras onde este usuário é quem recebe o
@@ -162,6 +171,14 @@ model Organizer {
   status        OrganizerStatus @default(PENDING)
   kybVerifiedAt DateTime?       @map("kyb_verified_at")  // LAYOUT_UPDATE.md §5.6.1 — exigido antes do 1o evento
   createdAt     DateTime        @default(now()) @map("created_at")
+
+  // Moderação — independente de `status` (que é só o fluxo de aprovação
+  // inicial): um organizador já APPROVED pode ser bloqueado depois. Impede
+  // criar evento novo e aprovar eventos pendentes dele; eventos já ON_SALE
+  // não são pausados automaticamente — isso é uma ação separada do admin.
+  blocked       Boolean         @default(false)
+  blockedAt     DateTime?       @map("blocked_at")
+  blockedReason String?         @map("blocked_reason")
 
   user        User         @relation(fields: [userId], references: [id])
   events      Event[]
@@ -264,6 +281,25 @@ model Event {
   // mais que o mínimo legal. Em categoria coberta, o servidor recusa < 4000.
   socialHalfBps Int? @map("social_half_bps")
 
+  // Limite de compra por conta — novo em 2026-08-08. null = sem limite. Conta
+  // ingressos emitidos + compras em andamento (mesmo padrão de
+  // lib/availability.ts), nunca só Ticket, senão dá pra furar enchendo o
+  // carrinho de PENDING sem nunca completar.
+  maxTicketsPerAccount Int? @map("max_tickets_per_account")
+
+  // Matriz de ingressos (dia × área × lote) — 2026-08-08. `ticketDays`/
+  // `ticketAreas` são só os NOMES das dimensões (`[{id, name}]`), guardados
+  // como JSON em vez de tabela própria porque só existem pra dar contexto de
+  // exibição/agrupamento aos `TicketType` (dayId/areaId abaixo); não há mais
+  // ninguém que precise consultá-los relacionalmente. `id` de cada entrada é
+  // gerado no cliente (não é o cuid do Prisma) e é o que `TicketType.dayId`/
+  // `areaId` referenciam — estável mesmo se o organizador renomear o dia/área
+  // depois (o nome muda, o id não), pra edição no Step 2 nunca perder dado
+  // vinculado a uma dimensão renomeada. null = evento não usa aquela dimensão
+  // (passe único pro evento inteiro / área única).
+  ticketDays  Json? @map("ticket_days")
+  ticketAreas Json? @map("ticket_areas")
+
   organizer     Organizer    @relation(fields: [organizerId], references: [id])
   tickets       Ticket[]
   purchases     Purchase[]
@@ -339,10 +375,42 @@ model TicketType {
   salesEndAt    DateTime? @map("sales_end_at")
   createdAt     DateTime  @default(now()) @map("created_at")
 
+  // Matriz — 2026-08-08. `dayIds`/`areaId` referenciam as entradas de
+  // `Event.ticketDays`/`ticketAreas` (id estável, não o texto do nome).
+  //
+  // `dayIds` é um CONJUNTO de dias, não um dia só (era `dayId String?` até a
+  // fatia de passes): [] = o evento não usa a dimensão de dia; [d1] = ingresso
+  // de um dia; [d1,d2,d3] = passe que dá entrada em todos eles. Modelar assim
+  // evita inventar um tipo de entidade paralelo pra passe — ele é só um
+  // TicketType com mais de um dia, e continua com preço, cota, lote e área
+  // como qualquer outro. Um subconjunto ([d1,d2] num evento de 3 dias) é
+  // passe parcial e sai de graça no mesmo modelo.
+  //
+  // `lotNumber` só ordena lotes DENTRO do mesmo grupo (mesmo conjunto de dias
+  // + área) — o checkout resolve o lote ativo pelo menor `lotNumber` do grupo
+  // que ainda não esgotou nem passou de `salesEndAt` (lib/ticketMatrix.ts), o
+  // comprador nunca escolhe o lote diretamente. `labelTouched` trava a
+  // regeneração automática do `label` quando o organizador edita o rótulo à
+  // mão no Step 2 — sem isso, renomear um dia/área reescreveria por cima de
+  // um rótulo que a pessoa escolheu de propósito.
+  dayIds       String[] @map("day_ids")
+  areaId       String?  @map("area_id")
+  lotNumber    Int      @default(1) @map("lot_number")
+  labelTouched Boolean  @default(false) @map("label_touched")
+
+  // Entrada antecipada — quantos minutos ANTES da abertura dos portões este
+  // tipo pode entrar (null/0 = na abertura, como todo mundo). É perk de
+  // porta, deliberadamente separado de `dayIds`: "cobre todos os dias" e
+  // "entra antes" são eixos independentes, e um VIP de dia único com 30min de
+  // antecedência cabe aqui sem schema novo.
+  // Só tem efeito quando o evento define abertura de portões.
+  earlyEntryMinutes Int? @map("early_entry_minutes")
+
   event     Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
   tickets   Ticket[]
   purchases Purchase[]
 
+  @@index([eventId, areaId])
   @@map("ticket_types")
 }
 
@@ -366,7 +434,9 @@ model Ticket {
   ticketType TicketType? @relation(fields: [ticketTypeId], references: [id])
   listing    Listing?
   purchase   Purchase?
-  checkin    Checkin?
+  // Um por dia do evento — ver comentário em Checkin. "Esteve lá" passa a ser
+  // checkins.length > 0, não checkin !== null.
+  checkins   Checkin[]
 
   @@unique([eventId, ticketNumber])
   @@map("tickets")
@@ -454,16 +524,27 @@ model Withdrawal {
   @@map("withdrawals")
 }
 
+// Check-in POR DIA do evento — antes era um por ingresso pra sempre
+// (tokenId @unique), o que impede qualquer ingresso multi-dia (um passe de
+// 3 dias precisa de uma entrada em cada dia, com o mesmo tokenId).
+//
+// `dayId` é o id da entrada de Event.ticketDays em que a entrada aconteceu,
+// resolvido pela data de calendário (lib/eventDay.ts). Vazio ("" = NO_DAY)
+// em evento sem dimensão de dia — string vazia e não null porque no Postgres
+// NULLs são distintos entre si num UNIQUE, e @@unique([tokenId, dayId]) com
+// null deixaria passar dois check-ins do mesmo ingresso no mesmo evento.
 model Checkin {
   id          String   @id @default(cuid())
-  tokenId     Int      @unique @map("token_id")
+  tokenId     Int      @map("token_id")
   eventId     String   @map("event_id")
+  dayId       String   @default("") @map("day_id")
   staffUserId String   @map("staff_user_id")
   scannedAt   DateTime @default(now()) @map("scanned_at")
 
   ticket Ticket @relation(fields: [tokenId], references: [tokenId])
   staff  User   @relation(fields: [staffUserId], references: [id])
 
+  @@unique([tokenId, dayId])
   @@map("checkins")
 }
 

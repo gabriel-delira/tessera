@@ -11,6 +11,20 @@ import { Icon } from "../../components/ui/Icon";
 import { IdentityModal } from "../../components/IdentityModal";
 import { Field } from "../../components/ui/Field";
 
+interface TicketGroup {
+  key: string;
+  dayIds: string[];
+  areaId: string | null;
+  dayNames: string[];
+  isPass: boolean;
+  label: string | null;
+  areaName: string | null;
+  soldOut: boolean;
+  priceUsdc: number | null;
+  priceBrl: number | null;
+  earlyEntryMinutes: number | null;
+}
+
 interface EventDetail {
   id: string;
   title: string;
@@ -27,6 +41,7 @@ interface EventDetail {
   available: number | null;
   status: string;
   organizer: string;
+  ticketGroups: TicketGroup[];
 }
 
 interface CheckoutState {
@@ -48,13 +63,33 @@ export default function EventDetailPage() {
   const [error, setError]           = useState<string | null>(null);
   const [needsIdentity, setNeedsIdentity] = useState(false);
   const [giftRecipient, setGiftRecipient] = useState("");
+  // Matriz de ingressos — 2026-08-08. O lote nunca é escolha do comprador
+  // (troca sozinho por cota/data, lib/ticketMatrix.ts); dia/passe e área são —
+  // aqui guardamos só a combinação escolhida, resolvida contra `ticketGroups`.
+  // A chave vem pronta do servidor (group.key), em vez de ser remontada aqui:
+  // ela precisa casar exatamente com o agrupamento que o checkout usa.
+  const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/events/${id}`)
       .then((r) => r.json())
-      .then((d) => { setEvent(d); setLoading(false); })
+      .then((d) => {
+        setEvent(d);
+        setLoading(false);
+        if (d.ticketGroups?.length) setSelectedGroupKey(d.ticketGroups[0].key);
+      })
       .catch(() => setLoading(false));
   }, [id]);
+
+  const selectedGroup = event?.ticketGroups.find((g) => g.key === selectedGroupKey) ?? null;
+  // "Escolha de dia" agrupa por conjunto de dias: dia único e passe são
+  // opções irmãs na mesma linha de seleção.
+  const daySets = [...new Map((event?.ticketGroups ?? []).map((g) => [g.dayIds.join("|"), g])).values()];
+  const hasDayChoice  = daySets.length > 1;
+  const hasAreaChoice = !!event && new Set(event.ticketGroups.map((g) => g.areaId)).size > 1;
+  const displayPriceUsdc = selectedGroup?.priceUsdc ?? event?.ticketPriceUsdc ?? 0;
+  const displayPriceBrl  = selectedGroup?.priceBrl ?? event?.ticketPriceBrl ?? 0;
+  const groupSoldOut = selectedGroup?.soldOut ?? false;
 
   // Poll purchase status after checkout
   useEffect(() => {
@@ -79,7 +114,12 @@ export default function EventDetailPage() {
       const r = await fetch(`/api/events/${id}/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ method: "PIX", giftRecipient: giftRecipient || undefined }),
+        body: JSON.stringify({
+          method: "PIX",
+          giftRecipient: giftRecipient || undefined,
+          dayIds: selectedGroup?.dayIds ?? [],
+          areaId: selectedGroup?.areaId ?? null,
+        }),
       });
       const d = await r.json();
       if (!r.ok) {
@@ -98,7 +138,7 @@ export default function EventDetailPage() {
   if (loading) return <div className="p-10 text-text-muted">Carregando…</div>;
   if (!event)  return <div className="p-10 text-erro-on-dark">Evento não encontrado.</div>;
 
-  const soldOut = event.available !== null && event.available <= 0;
+  const soldOut = (event.available !== null && event.available <= 0) || groupSoldOut;
   const feePercent = (event.platformFeeBps / 100).toFixed(0);
 
   return (
@@ -156,11 +196,73 @@ export default function EventDetailPage() {
           <Panel title="Comprar ingresso">
             {!checkout ? (
               <div className="flex flex-col gap-3">
+                {/* Matriz de ingressos — 2026-08-08. Lote nunca é escolha do
+                    comprador (troca sozinho); dia/área são, só aparecem
+                    quando o evento realmente tem mais de uma opção. */}
+                {hasDayChoice && (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs font-medium text-text-muted">Dia ou passe</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {daySets.map((g) => {
+                        const setKey = g.dayIds.join("|");
+                        const selected = selectedGroup?.dayIds.join("|") === setKey;
+                        return (
+                          <button
+                            key={setKey}
+                            type="button"
+                            onClick={() => {
+                              // Preserva a área escolhida ao trocar de dia/passe.
+                              const match =
+                                event.ticketGroups.find((c) => c.dayIds.join("|") === setKey && (!hasAreaChoice || c.areaId === selectedGroup?.areaId)) ??
+                                event.ticketGroups.find((c) => c.dayIds.join("|") === setKey);
+                              if (match) setSelectedGroupKey(match.key);
+                            }}
+                            className={`rounded-full border px-3 py-1 text-xs ${selected ? "border-laranja-500 bg-laranja-500/10 text-text" : "border-border-strong text-text-muted"}`}
+                          >
+                            {g.label ?? g.dayNames.join(", ")}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {/* Um passe não diz sozinho quais dias cobre — o rótulo é
+                        comercial ("Passe completo"), então os dias vão embaixo. */}
+                    {selectedGroup?.isPass && (
+                      <p className="text-xs text-text-muted">Dá entrada em: {selectedGroup.dayNames.join(", ")}</p>
+                    )}
+                    {!!selectedGroup?.earlyEntryMinutes && (
+                      <p className="text-xs text-ouro-400">
+                        Entrada {selectedGroup.earlyEntryMinutes} min antes da abertura dos portões
+                      </p>
+                    )}
+                  </div>
+                )}
+                {hasAreaChoice && (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs font-medium text-text-muted">Área</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[...new Map(event.ticketGroups.filter((g) => !hasDayChoice || g.dayIds.join("|") === selectedGroup?.dayIds.join("|")).map((g) => [g.areaId, g.areaName])).entries()].map(([aId, aName]) => (
+                        <button
+                          key={`${aId}`}
+                          type="button"
+                          onClick={() => {
+                            const match =
+                              event.ticketGroups.find((c) => c.areaId === aId && c.dayIds.join("|") === selectedGroup?.dayIds.join("|")) ??
+                              event.ticketGroups.find((c) => c.areaId === aId);
+                            if (match) setSelectedGroupKey(match.key);
+                          }}
+                          className={`rounded-full border px-3 py-1 text-xs ${selectedGroup?.areaId === aId ? "border-laranja-500 bg-laranja-500/10 text-text" : "border-border-strong text-text-muted"}`}
+                        >
+                          {aName}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <p className="text-2xl font-bold tabular-nums text-text">
-                    R$ {event.ticketPriceBrl.toFixed(2).replace(".", ",")}
+                    R$ {displayPriceBrl.toFixed(2).replace(".", ",")}
                   </p>
-                  <p className="text-xs text-text-muted">≈ {event.ticketPriceUsdc} USDC</p>
+                  <p className="text-xs text-text-muted">≈ {displayPriceUsdc} USDC</p>
                 </div>
                 <p className="text-xs text-text-muted">Taxa de serviço {feePercent}% inclusa</p>
                 {soldOut ? (

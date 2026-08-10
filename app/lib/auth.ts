@@ -47,3 +47,7 @@ export function unauthorized() {
 export function forbidden() {
   return Response.json({ error: "Forbidden" }, { status: 403 });
 }
+
+export function blockedResponse() {
+  return Response.json({ error: "Conta bloqueada", code: "ACCOUNT_BLOCKED" }, { status: 403 });
+}

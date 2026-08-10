@@ -1,0 +1,15 @@
+{
+  // tsconfig só dos scripts de verificação rodados por ts-node. Existe porque
+  // `tsconfig-paths/register` resolve o alias `@/*` lendo baseUrl do tsconfig
+  // em disco — e o tsconfig do Next não declara baseUrl (o bundler resolve o
+  // alias sozinho). Não afeta o build nem o typecheck do app.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "..",
+    "paths": { "@/*": ["./*"] },
+    "module": "CommonJS",
+    "target": "ES2020",
+    "noEmit": true
+  },
+  "include": ["./**/*.ts"]
+}

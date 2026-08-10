@@ -26,7 +26,10 @@ export async function computeAchievements(walletAddress: string): Promise<Achiev
     orderBy: { scannedAt: "asc" },
   });
 
-  const eventCount = checkins.length;
+  // Conta EVENTOS distintos, não linhas de check-in: com check-in por dia
+  // (Checkin.dayId) um passe de 3 dias gera 3 linhas do mesmo evento, e
+  // `checkins.length` daria a conquista "3 eventos" pra quem foi a um só.
+  const eventCount = new Set(checkins.map((c) => c.ticket.eventId)).size;
   const cities = new Set(checkins.map((c) => c.ticket.event.city));
   const monthsByYear = new Map<number, Set<number>>();
   for (const c of checkins) {

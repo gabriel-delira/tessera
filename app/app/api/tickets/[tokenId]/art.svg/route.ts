@@ -17,7 +17,7 @@ export async function GET(
   const ticket = await prisma.ticket.findUnique({
     where: { tokenId },
     include: {
-      checkin: true,
+      checkins: { select: { id: true } },
       event: { select: { title: true, city: true, eventDate: true } },
     },
   });
@@ -29,7 +29,7 @@ export async function GET(
     ticketNumber: ticket.ticketNumber,
     city: ticket.event.city,
     eventDateIso: ticket.event.eventDate.toISOString(),
-    attended: ticket.checkin !== null,
+    attended: ticket.checkins.length > 0,
   });
 
   return new NextResponse(svg, {

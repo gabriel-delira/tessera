@@ -441,10 +441,13 @@ async function main() {
 
     if (t.checkedInAt) {
       await prisma.checkin.upsert({
-        where: { tokenId: t.tokenId },
+        // dayId "" = evento sem dimensão de dia (lib/eventDay.ts: NO_DAY);
+        // nenhum evento do seed usa dias, então a chave composta é (token, "").
+        where: { tokenId_dayId: { tokenId: t.tokenId, dayId: "" } },
         create: {
           tokenId: t.tokenId,
           eventId: t.eventId,
+          dayId: "",
           staffUserId: staff.id,
           scannedAt: t.checkedInAt,
         },
@@ -519,8 +522,8 @@ async function main() {
 
     if (l.checkedIn) {
       await prisma.checkin.upsert({
-        where: { tokenId: l.tokenId },
-        create: { tokenId: l.tokenId, eventId: l.eventId, staffUserId: staff.id, scannedAt: daysFrom(-138) },
+        where: { tokenId_dayId: { tokenId: l.tokenId, dayId: "" } },
+        create: { tokenId: l.tokenId, eventId: l.eventId, dayId: "", staffUserId: staff.id, scannedAt: daysFrom(-138) },
         update: {},
       });
     }

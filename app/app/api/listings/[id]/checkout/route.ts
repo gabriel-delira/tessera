@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getAuthUser, unauthorized } from "@/lib/auth";
+import { getAuthUser, unauthorized, blockedResponse } from "@/lib/auth";
 import { lockRate, usdcToBrl } from "@/lib/fx";
 import { psp } from "@/lib/psp";
 import { lockListingOnChain, unlockListingOnChain } from "@/lib/onchain";
@@ -20,6 +20,7 @@ export async function POST(
 ) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
+  if (user.blocked) return blockedResponse();
 
   if (!user.walletAddress) {
     return NextResponse.json({ error: "No wallet linked to account" }, { status: 409 });

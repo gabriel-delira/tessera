@@ -11,7 +11,9 @@ export async function GET(req: NextRequest) {
   const tickets = await prisma.ticket.findMany({
     where: { ownerAddress: user.walletAddress },
     include: {
-      checkin: { select: { id: true } }, // presença — "Você esteve lá" (§5.3/§8)
+      // Presença — "Você esteve lá" (§5.3/§8). Lista porque o check-in agora é
+      // por dia do evento; "esteve lá" é ter entrado em pelo menos um.
+      checkins: { select: { id: true } },
       event: {
         select: {
           id: true,
@@ -28,6 +30,6 @@ export async function GET(req: NextRequest) {
   });
 
   return NextResponse.json(
-    tickets.map((t) => ({ ...t, attended: t.checkin !== null }))
+    tickets.map((t) => ({ ...t, attended: t.checkins.length > 0 }))
   );
 }

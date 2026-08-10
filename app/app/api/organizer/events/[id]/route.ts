@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getAuthUser, unauthorized, forbidden } from "@/lib/auth";
 import { geocodeAddress } from "@/lib/geocode";
 import { isSocialHalfMandatory } from "@/lib/socialHalfQuota";
+import { parseTicketMatrix, type ParsedTicketType } from "@/lib/ticketMatrixInput";
 
 export async function PATCH(
   req: NextRequest,
@@ -27,8 +28,8 @@ export async function PATCH(
   const body = await req.json().catch(() => ({}));
   const allowed = [
     "title","description","venue","city","coverImageUrl","coverVideoUrl",
-    "eventDate","endDate","ticketPriceUsdc","maxTickets",
-    "category","hasSocialHalf","socialHalfBps",
+    "eventDate","endDate",
+    "category","hasSocialHalf","socialHalfBps","maxTicketsPerAccount",
   ];
   const data: Record<string, unknown> = {};
   for (const key of allowed) {
@@ -77,21 +78,60 @@ export async function PATCH(
     data.longitude = geo?.longitude ?? null;
   }
 
-  const updated = await prisma.event.update({ where: { id }, data });
-
-  // PLANO_EVOLUCAO_V2.md §5.1 — nesta fatia todo evento tem um único TicketType,
-  // espelho de ticketPriceUsdc/maxTickets. Editar o evento antes da aprovação
-  // sem sincronizar o tipo deixaria a matriz enviada on-chain (createEventOnChain)
-  // desatualizada em relação ao que o organizador acabou de mudar na tela.
-  if ("ticketPriceUsdc" in data || "maxTickets" in data) {
-    await prisma.ticketType.updateMany({
-      where: { eventId: id },
-      data: {
-        ...("ticketPriceUsdc" in data ? { priceUsdc: data.ticketPriceUsdc as number } : {}),
-        ...("maxTickets" in data ? { quantity: data.maxTickets as number | null } : {}),
-      },
-    });
+  // Limite por conta — 2026-08-08. Validado aqui (não no loop genérico
+  // acima) porque, diferente dos outros campos de `allowed`, precisa virar
+  // número e rejeitar valor inválido em vez de gravar o que veio cru.
+  if ("maxTicketsPerAccount" in data) {
+    const raw = data.maxTicketsPerAccount;
+    if (raw === null || raw === "") {
+      data.maxTicketsPerAccount = null;
+    } else {
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < 1) {
+        return NextResponse.json({ error: "maxTicketsPerAccount must be a positive integer, or omitted" }, { status: 400 });
+      }
+      data.maxTicketsPerAccount = n;
+    }
   }
+
+  // Matriz de ingressos — 2026-08-08. `ticketTypes` não está em `allowed`
+  // (não é um campo escalar do Event), então só entra em jogo se vier no
+  // body; sem ela, o PATCH não mexe na matriz existente. Pré-aprovação
+  // ninguém comprou nada ainda (checado acima), então trocar a matriz
+  // inteira — apagar e recriar — é seguro; não há Ticket/Purchase presos a
+  // um TicketType que vai sumir.
+  let matrixTypes: ParsedTicketType[] | null = null;
+  if ("ticketTypes" in body) {
+    const parsed = parseTicketMatrix(body);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    data.ticketPriceUsdc = parsed.matrix.priceUsdc;
+    data.maxTickets = parsed.matrix.maxTickets;
+    data.ticketDays = parsed.matrix.ticketDays ?? undefined;
+    data.ticketAreas = parsed.matrix.ticketAreas ?? undefined;
+    matrixTypes = parsed.matrix.ticketTypes;
+  }
+
+  const [updated] = await prisma.$transaction([
+    prisma.event.update({ where: { id }, data }),
+    ...(matrixTypes
+      ? [
+          prisma.ticketType.deleteMany({ where: { eventId: id } }),
+          prisma.ticketType.createMany({
+            data: matrixTypes.map((t) => ({
+              eventId:    id,
+              label:      t.label,
+              priceUsdc:  t.priceUsdc,
+              quantity:   t.quantity,
+              salesEndAt: t.salesEndAt,
+              dayIds:     t.dayIds,
+              areaId:     t.areaId,
+              lotNumber:  t.lotNumber,
+              earlyEntryMinutes: t.earlyEntryMinutes,
+            })),
+          }),
+        ]
+      : []),
+  ]);
 
   return NextResponse.json({ event: updated });
 }

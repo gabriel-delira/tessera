@@ -13,7 +13,8 @@
     "db:studio": "prisma studio",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:cov": "vitest run --coverage"
+    "test:cov": "vitest run --coverage",
+    "verify:ticket-matrix": "ts-node --project scripts/tsconfig.json -r tsconfig-paths/register scripts/verify-ticket-matrix.ts"
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\",\"target\":\"ES2020\"} prisma/seed.ts"

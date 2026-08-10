@@ -28,6 +28,9 @@ export async function POST(
   if (event.status !== "PENDING_APPROVAL") {
     return NextResponse.json({ error: "Event is not pending approval" }, { status: 409 });
   }
+  if (event.organizer.blocked) {
+    return NextResponse.json({ error: "Organizador bloqueado" }, { status: 409 });
+  }
   if (event.ticketTypes.length === 0) {
     return NextResponse.json({ error: "Event has no ticket types" }, { status: 409 });
   }

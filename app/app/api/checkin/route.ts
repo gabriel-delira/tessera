@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getAuthUser, unauthorized } from "@/lib/auth";
 import { normalizeAccessCode, parseAccessCodeQrPayload } from "@/lib/accessCode";
 import { isRateLimited } from "@/lib/rateLimit";
+import { NO_DAY, EVENT_TZ, resolveEventDay, resolveDoorsOpenAt } from "@/lib/eventDay";
 
 if (!process.env.QR_SECRET) throw new Error("QR_SECRET env var not set — refusing to start");
 const QR_SECRET: string = process.env.QR_SECRET;
@@ -81,7 +82,12 @@ async function handleTicketCheckin(qrPayload: string, staffUserId: string) {
 
   const ticket = await prisma.ticket.findUnique({
     where:   { tokenId },
-    include: { event: { select: { title: true, venue: true, city: true, eventDate: true } } },
+    include: {
+      event:      { select: { title: true, venue: true, city: true, eventDate: true, ticketDays: true, doorsOpenAt: true } },
+      // dayIds: para QUAIS dias este ingresso vale (passe = mais de um).
+      // earlyEntryMinutes: quantos minutos antes do portão ele pode entrar.
+      ticketType: { select: { dayIds: true, label: true, earlyEntryMinutes: true } },
+    },
   });
 
   if (!ticket) {
@@ -96,29 +102,84 @@ async function handleTicketCheckin(qrPayload: string, staffUserId: string) {
     return NextResponse.json({ error: "Invalid or expired QR code" }, { status: 422 });
   }
 
-  if (ticket.status === "CHECKED_IN") {
-    return NextResponse.json({ error: "Ticket already checked in", tokenId }, { status: 409 });
-  }
-  if (ticket.status !== "VALID") {
+  // CHECKED_IN não barra mais: com check-in por dia ele só significa "já
+  // entrou em ALGUM dia" — quem decide se pode entrar HOJE é a unicidade
+  // (tokenId, dayId) logo abaixo. LISTED/FROZEN seguem barrados.
+  if (ticket.status !== "VALID" && ticket.status !== "CHECKED_IN") {
     return NextResponse.json({
       error: `Ticket cannot be checked in — current status: ${ticket.status}`,
       tokenId,
     }, { status: 409 });
   }
 
-  await prisma.$transaction([
-    prisma.ticket.update({
-      where: { tokenId },
-      data:  { status: "CHECKED_IN" },
-    }),
-    prisma.checkin.create({
-      data: {
+  // Qual dia do evento é hoje (lib/eventDay.ts). Evento sem dimensão de dia,
+  // ou multi-dia legado sem datas gravadas, cai no sentinela NO_DAY — que
+  // preserva exatamente o comportamento antigo de "um check-in por ingresso".
+  const resolution = resolveEventDay(ticket.event.ticketDays);
+  if (resolution.kind === "outside") {
+    return NextResponse.json({
+      error: `Hoje (${resolution.today}) não é um dia deste evento`,
+      tokenId,
+    }, { status: 409 });
+  }
+  const dayId = resolution.kind === "resolved" ? resolution.dayId : NO_DAY;
+
+  // O ingresso vale pra um CONJUNTO de dias — um dia só no ingresso comum,
+  // vários no passe. Basta hoje estar no conjunto; é isso que faz o mesmo
+  // passe entrar no dia 1, no 2 e no 3 sem tratamento especial.
+  const ticketDayIds = ticket.ticketType?.dayIds ?? [];
+  if (resolution.kind === "resolved" && ticketDayIds.length > 0 && !ticketDayIds.includes(dayId)) {
+    return NextResponse.json({
+      error: `Este ingresso é de outro dia (${ticket.ticketType?.label})`,
+      tokenId,
+    }, { status: 409 });
+  }
+
+  // Portão. `earlyEntryMinutes` é o perk do passe ultra: entra N minutos
+  // antes de todo mundo. Só existe gate quando o evento declara abertura de
+  // portões — sem doorsOpenAt o comportamento é o de antes (entra a qualquer
+  // hora do dia do evento), pra não passar a barrar eventos já publicados.
+  const doorsAt = resolveDoorsOpenAt(ticket.event.doorsOpenAt, ticket.event.ticketDays, dayId);
+  if (doorsAt) {
+    const earlyMin = ticket.ticketType?.earlyEntryMinutes ?? 0;
+    const allowedFrom = new Date(doorsAt.getTime() - earlyMin * 60_000);
+    if (Date.now() < allowedFrom.getTime()) {
+      return NextResponse.json({
+        error: earlyMin > 0
+          ? `Entrada antecipada deste ingresso começa às ${formatTime(allowedFrom)}`
+          : `Os portões abrem às ${formatTime(allowedFrom)}`,
         tokenId,
-        eventId:     ticket.eventId,
-        staffUserId,
-      },
-    }),
-  ]);
+      }, { status: 409 });
+    }
+  }
+
+  try {
+    await prisma.$transaction([
+      prisma.ticket.update({
+        where: { tokenId },
+        data:  { status: "CHECKED_IN" },
+      }),
+      prisma.checkin.create({
+        data: {
+          tokenId,
+          eventId:     ticket.eventId,
+          dayId,
+          staffUserId,
+        },
+      }),
+    ]);
+  } catch (err) {
+    // A UNIQUE é o guard real contra reentrada — não um SELECT antes do
+    // INSERT, que perde a corrida de dois leitores na mesma catraca.
+    if (isUniqueViolation(err)) {
+      return NextResponse.json({ error: "Ticket already checked in", tokenId }, { status: 409 });
+    }
+    throw err;
+  }
+
+  // ticketDays fora da resposta — é estrutura interna da matriz, a tela de
+  // porta só precisa identificar o evento.
+  const { ticketDays: _ticketDays, ...eventInfo } = ticket.event;
 
   return NextResponse.json({
     ok:           true,
@@ -126,8 +187,25 @@ async function handleTicketCheckin(qrPayload: string, staffUserId: string) {
     tokenId,
     ticketNumber: ticket.ticketNumber,
     seat:         ticket.seat,
-    event:        ticket.event,
+    event:        eventInfo,
+    dayName:      resolution.kind === "resolved" ? dayNameOf(ticket.event.ticketDays, dayId) : null,
   });
+}
+
+// Hora no fuso do evento — a portaria lê "abre às 10:00", não um ISO em UTC.
+function formatTime(d: Date): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: EVENT_TZ, hour: "2-digit", minute: "2-digit", hour12: false,
+  }).format(d);
+}
+
+function dayNameOf(ticketDays: unknown, dayId: string): string | null {
+  const days = (ticketDays as { id: string; name: string }[] | null) ?? [];
+  return days.find((d) => d.id === dayId)?.name ?? null;
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { code?: string }).code === "P2002";
 }
 
 // PLANO_EVOLUCAO_V2.md §10.5-10.6/D41-D43 — entrada por código vira

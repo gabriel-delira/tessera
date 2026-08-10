@@ -18,9 +18,30 @@ export async function GET(req: NextRequest) {
 
   const events = await prisma.event.findMany({
     where:   { status },
-    include: { organizer: { select: { companyName: true, document: true } } },
+    include: {
+      organizer: { select: { companyName: true, document: true } },
+      // Matriz de ingressos (dias × área × lote) + quantos já foram mintados
+      // por tipo — pra admin ver a composição real da oferta, não só o preço
+      // "de vitrine" do evento (Event.ticketPriceUsdc).
+      // Sem ordenação por dia: `dayIds` é uma lista, e ordenar por ela no SQL
+      // não tem significado — a tela ordena pela ordem dos dias do evento.
+      ticketTypes: {
+        orderBy: [{ areaId: "asc" }, { lotNumber: "asc" }],
+        include: { _count: { select: { tickets: true } } },
+      },
+      // Só os campos usados pra contar (não o `code` em si — segredo ao
+      // portador, sem motivo de sair desta tela).
+      accessCodes: { select: { usedAt: true, revokedAt: true } },
+    },
     orderBy: { createdAt: "asc" },
   });
 
-  return NextResponse.json({ events });
+  return NextResponse.json({
+    events: events.map(({ accessCodes, ...e }) => ({
+      ...e,
+      accessCodesTotal:   accessCodes.length,
+      accessCodesUsed:    accessCodes.filter((c) => c.usedAt !== null).length,
+      accessCodesRevoked: accessCodes.filter((c) => c.revokedAt !== null).length,
+    })),
+  });
 }

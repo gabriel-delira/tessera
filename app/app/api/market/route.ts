@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
     include: {
       ticket: {
         include: {
-          checkin: true,
+          checkins: { select: { id: true } },
           event: {
             select: {
               id:           true,
@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
       expiresAt:       l.expiresAt,
       createdAt:       l.createdAt,
       isCollectible:   tab === "collectibles",
-      attendedEvent:   l.ticket.checkin !== null, // "Você esteve lá" — §5.3
+      attendedEvent:   l.ticket.checkins.length > 0, // "Você esteve lá" — §5.3
       sellerReceivesBrl:   split.sellerShare,
       organizerRoyaltyBrl: split.organizerRoyalty,
       platformFeeBrl:      split.platformFee,    // taxa de intermediação, discriminada — nunca embutida no priceBrl

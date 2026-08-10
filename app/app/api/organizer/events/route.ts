@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getAuthUser, unauthorized, forbidden } from "@/lib/auth";
 import { geocodeAddress } from "@/lib/geocode";
 import { resolveMaxResaleBps } from "@/lib/resaleCap";
 import { isSocialHalfMandatory } from "@/lib/socialHalfQuota";
+import { parseTicketMatrix } from "@/lib/ticketMatrixInput";
 
 // PLANO_EVOLUCAO_V2.md §4.4 — métricas por evento na tabela do organizador.
 // Tudo agregado em queries próprias (groupBy/reduce), nunca uma query por
@@ -88,6 +90,9 @@ export async function POST(req: NextRequest) {
 
   const organizer = await prisma.organizer.findUnique({ where: { userId: user.id } });
   if (!organizer) return forbidden();
+  if (organizer.blocked) {
+    return NextResponse.json({ error: "Organizador bloqueado", code: "ORGANIZER_BLOCKED" }, { status: 403 });
+  }
   if (organizer.status !== "APPROVED") {
     return NextResponse.json({ error: "Organizer not approved yet" }, { status: 403 });
   }
@@ -101,24 +106,34 @@ export async function POST(req: NextRequest) {
     title, description, venue, city,
     country, state,
     coverImageUrl, coverVideoUrl, eventDate, endDate,
-    ticketPriceUsdc, maxTickets,
     royaltyBps, royaltyOrgShareBps,
     category, subcategory, lineup, doorsOpenAt,
-    reservedTickets,
+    reservedTickets, maxTicketsPerAccount,
     hasSocialHalf, socialHalfBps,
   } = body;
 
-  if (!title || !venue || !city || !eventDate || !endDate || ticketPriceUsdc === undefined) {
+  if (!title || !venue || !city || !eventDate || !endDate) {
     return NextResponse.json(
-      { error: "title, venue, city, eventDate, endDate and ticketPriceUsdc are required" },
+      { error: "title, venue, city, eventDate and endDate are required" },
       { status: 400 }
     );
   }
 
-  // ── Validation ────────────────────────────────────────────────────────────
-  const price = Number(ticketPriceUsdc);
-  if (!Number.isFinite(price) || price <= 0) {
-    return NextResponse.json({ error: "ticketPriceUsdc must be a positive number" }, { status: 400 });
+  // Matriz de ingressos (dia × área × lote) — 2026-08-08. `Event.ticketPriceUsdc`/
+  // `maxTickets` deixam de ser input direto do organizador — viram
+  // denormalização (menor preço / soma das cotas) calculada pelo helper.
+  const parsed = parseTicketMatrix(body);
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const { ticketDays: finalTicketDays, ticketAreas: finalTicketAreas, ticketTypes: parsedTypes } = parsed.matrix;
+  const price = parsed.matrix.priceUsdc;
+  const max = parsed.matrix.maxTickets;
+
+  let finalMaxTicketsPerAccount: number | null = null;
+  if (maxTicketsPerAccount !== undefined && maxTicketsPerAccount !== null && maxTicketsPerAccount !== "") {
+    finalMaxTicketsPerAccount = Number(maxTicketsPerAccount);
+    if (!Number.isInteger(finalMaxTicketsPerAccount) || finalMaxTicketsPerAccount < 1) {
+      return NextResponse.json({ error: "maxTicketsPerAccount must be a positive integer, or omitted" }, { status: 400 });
+    }
   }
 
   const date = new Date(eventDate);
@@ -138,14 +153,6 @@ export async function POST(req: NextRequest) {
   }
   if (endDateParsed.getTime() <= date.getTime()) {
     return NextResponse.json({ error: "endDate must be after eventDate" }, { status: 400 });
-  }
-
-  let max: number | null = null;
-  if (maxTickets !== undefined && maxTickets !== null) {
-    max = Number(maxTickets);
-    if (!Number.isInteger(max) || max < 1) {
-      return NextResponse.json({ error: "maxTickets must be a positive integer" }, { status: 400 });
-    }
   }
 
   // Fees/royalties are NOT taken from organizer input.
@@ -251,16 +258,26 @@ export async function POST(req: NextRequest) {
       reservedTickets:     finalReservedTickets,
       hasSocialHalf:       finalHasSocialHalf,
       socialHalfBps:       finalSocialHalfBps,
-      // PLANO_EVOLUCAO_V2.md §5.1/§5.2 — todo evento nasce com um TicketType
-      // único, espelhando o preço/cota que o Step 2 do NewEventModal ainda
-      // coleta como campo simples. É esta linha que a aprovação envia como a
-      // matriz (de um elemento) para createEvent on-chain.
+      maxTicketsPerAccount: finalMaxTicketsPerAccount,
+      // Cast: o tipo de campo Json do Prisma só aceita InputJsonObject, e um
+      // array de objetos não satisfaz a index signature dele — TicketDim[] é
+      // JSON válido, só não é o shape que o tipo gerado descreve.
+      ticketDays:  (finalTicketDays ?? undefined) as Prisma.InputJsonValue | undefined,
+      ticketAreas: (finalTicketAreas ?? undefined) as Prisma.InputJsonValue | undefined,
+      // Matriz de ingressos (dia × área × lote) — 2026-08-08. É esta lista
+      // que a aprovação envia como `TicketTypeInput[]` para createEvent
+      // on-chain (ordenada por createdAt, mesma ordem do typeId on-chain).
       ticketTypes: {
-        create: {
-          label:     "Inteira",
-          priceUsdc: price,
-          quantity:  max,
-        },
+        create: parsedTypes.map((t) => ({
+          label:      t.label,
+          priceUsdc:  t.priceUsdc,
+          quantity:   t.quantity,
+          salesEndAt: t.salesEndAt,
+          dayIds:     t.dayIds,
+          areaId:     t.areaId,
+          lotNumber:  t.lotNumber,
+          earlyEntryMinutes: t.earlyEntryMinutes,
+        })),
       },
     },
   });
